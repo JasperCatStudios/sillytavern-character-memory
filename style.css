@@ -1,0 +1,129 @@
+.charMemory_settings .inline-drawer-content {
+    padding: 5px 0;
+}
+
+.charMemory_statusRow {
+    margin: 4px 0;
+}
+
+.charMemory_buttonRow {
+    display: flex;
+    gap: 8px;
+    margin: 8px 0;
+}
+
+.charMemory_sliderRow {
+    margin: 8px 0;
+}
+
+.charMemory_sliderRow input[type="range"] {
+    width: 100%;
+}
+
+.charMemory_promptSection {
+    margin: 8px 0;
+}
+
+.charMemory_promptSection textarea {
+    width: 100%;
+    resize: vertical;
+    min-height: 100px;
+}
+
+/* Diagnostics */
+.charMemory_diagnosticsContent {
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.charMemory_diagTimestamp {
+    font-size: 0.85em;
+    opacity: 0.7;
+    margin-bottom: 6px;
+}
+
+.charMemory_diagSection {
+    margin: 8px 0;
+}
+
+.charMemory_diagCard {
+    background: var(--SmartThemeBlurTintColor, rgba(0, 0, 0, 0.1));
+    border-radius: 4px;
+    padding: 6px 8px;
+    margin: 4px 0;
+    font-size: 0.9em;
+}
+
+.charMemory_diagCardTitle {
+    font-weight: bold;
+    margin-bottom: 2px;
+}
+
+.charMemory_diagCardKeys {
+    font-size: 0.85em;
+    opacity: 0.8;
+}
+
+.charMemory_diagCardContent {
+    font-size: 0.85em;
+    opacity: 0.7;
+    white-space: pre-wrap;
+    max-height: 100px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.charMemory_diagEmpty {
+    font-size: 0.85em;
+    opacity: 0.5;
+    font-style: italic;
+    margin: 4px 0;
+}
+
+/* View Memories Modal (fallback) */
+.charMemory_modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.6);
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.charMemory_modalContent {
+    background: var(--SmartThemeBodyColor, #1a1a2e);
+    border-radius: 8px;
+    width: 80%;
+    max-width: 700px;
+    max-height: 80vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.charMemory_modalHeader {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 16px;
+    font-weight: bold;
+    border-bottom: 1px solid var(--SmartThemeBorderColor, #333);
+}
+
+.charMemory_modalClose {
+    cursor: pointer;
+    font-size: 1.5em;
+    line-height: 1;
+}
+
+.charMemory_modalBody {
+    padding: 16px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    font-size: 0.9em;
+    flex: 1;
+}

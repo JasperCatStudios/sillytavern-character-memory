@@ -1,0 +1,12 @@
+{
+    "display_name": "CharMemory",
+    "loading_order": 100,
+    "requires": [],
+    "optional": [],
+    "js": "index.js",
+    "css": "style.css",
+    "author": "bal-spec",
+    "version": "1.0.0",
+    "homePage": "",
+    "auto_update": false
+}

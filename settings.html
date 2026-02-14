@@ -1,0 +1,93 @@
+<div class="charMemory_settings">
+    <div class="inline-drawer">
+        <div class="inline-drawer-toggle inline-drawer-header">
+            <b>CharMemory</b>
+            <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
+        </div>
+        <div class="inline-drawer-content">
+
+            <!-- Memory Status (default open) -->
+            <div class="inline-drawer">
+                <div class="inline-drawer-toggle inline-drawer-header">
+                    <b>Memory Status</b>
+                    <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
+                </div>
+                <div class="inline-drawer-content" style="display: block;">
+                    <div class="charMemory_statusRow">
+                        <label class="checkbox_label" for="charMemory_enabled">
+                            <input type="checkbox" id="charMemory_enabled" />
+                            <span>Enable automatic extraction</span>
+                        </label>
+                    </div>
+
+                    <div class="charMemory_statusRow">
+                        <small>Messages since last extraction: <strong id="charMemory_messagesSince">0</strong></small>
+                    </div>
+                    <div class="charMemory_statusRow">
+                        <small>Last extracted at message index: <strong id="charMemory_lastIndex">-1</strong></small>
+                    </div>
+
+                    <div class="charMemory_buttonRow">
+                        <input type="button" id="charMemory_extractNow" class="menu_button" value="Extract Now" />
+                        <input type="button" id="charMemory_viewMemories" class="menu_button" value="View Memories" />
+                    </div>
+
+                    <div class="charMemory_sliderRow">
+                        <label for="charMemory_interval">
+                            <small>Extract every <span id="charMemory_intervalValue">10</span> character messages</small>
+                        </label>
+                        <input type="range" id="charMemory_interval" min="3" max="50" step="1" value="10" />
+                    </div>
+                </div>
+            </div>
+
+            <!-- Diagnostics (default closed) -->
+            <div class="inline-drawer">
+                <div class="inline-drawer-toggle inline-drawer-header">
+                    <b>Diagnostics</b>
+                    <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
+                </div>
+                <div class="inline-drawer-content">
+                    <div class="charMemory_buttonRow">
+                        <input type="button" id="charMemory_refreshDiag" class="menu_button" value="Refresh" />
+                    </div>
+                    <div id="charMemory_diagnosticsContent" class="charMemory_diagnosticsContent">
+                        <div class="charMemory_diagEmpty">Click "Refresh" after a generation to see diagnostics.</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Settings (default closed) -->
+            <div class="inline-drawer">
+                <div class="inline-drawer-toggle inline-drawer-header">
+                    <b>Settings</b>
+                    <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
+                </div>
+                <div class="inline-drawer-content">
+                    <div class="charMemory_sliderRow">
+                        <label for="charMemory_maxMessages">
+                            <small>Max messages per extraction: <span id="charMemory_maxMessagesValue">20</span></small>
+                        </label>
+                        <input type="range" id="charMemory_maxMessages" min="5" max="50" step="1" value="20" />
+                    </div>
+
+                    <div class="charMemory_sliderRow">
+                        <label for="charMemory_responseLength">
+                            <small>Response length (tokens): <span id="charMemory_responseLengthValue">500</span></small>
+                        </label>
+                        <input type="range" id="charMemory_responseLength" min="100" max="2000" step="50" value="500" />
+                    </div>
+
+                    <div class="charMemory_promptSection">
+                        <label for="charMemory_extractionPrompt">
+                            <small>Extraction Prompt</small>
+                        </label>
+                        <textarea id="charMemory_extractionPrompt" class="text_pole textarea_compact" rows="8" placeholder="Enter extraction prompt..."></textarea>
+                        <input type="button" id="charMemory_restorePrompt" class="menu_button" value="Restore Default Prompt" />
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>

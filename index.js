@@ -222,8 +222,33 @@ function ensureMetadata() {
 function updateStatusDisplay() {
     ensureMetadata();
     const meta = chat_metadata[MODULE_NAME];
-    $('#charMemory_messagesSince').text(meta?.messagesSinceExtraction ?? 0);
-    $('#charMemory_lastIndex').text(meta?.lastExtractedIndex ?? -1);
+    const interval = extension_settings[MODULE_NAME]?.interval ?? 10;
+    const since = meta?.messagesSinceExtraction ?? 0;
+
+    // Stats bar: progress
+    $('#charMemory_statProgress').text(`${since} / ${interval}`);
+
+    // Stats bar: file name
+    const charName = getCharacterName();
+    if (charName) {
+        const fileName = getMemoryFileName();
+        $('#charMemory_statFile').text(fileName).attr('title', fileName);
+    } else {
+        $('#charMemory_statFile').text('No character').attr('title', 'No character selected');
+    }
+
+    // Stats bar: memory count (async)
+    const attachment = findMemoryAttachment();
+    if (attachment) {
+        getFileAttachment(attachment.url).then(content => {
+            const count = parseMemories(content || '').length;
+            $('#charMemory_statCount').text(`${count} memor${count === 1 ? 'y' : 'ies'}`);
+        }).catch(() => {
+            $('#charMemory_statCount').text('? memories');
+        });
+    } else {
+        $('#charMemory_statCount').text('0 memories');
+    }
 }
 
 function getCharacterName() {
@@ -833,6 +858,7 @@ async function consolidateMemories() {
         const afterCount = consolidated.length;
         toastr.success(`Consolidated ${beforeCount} → ${afterCount} memories.`, 'CharMemory');
         console.log(LOG_PREFIX, `Consolidation: ${beforeCount} → ${afterCount}`);
+        updateStatusDisplay();
     } catch (err) {
         console.error(LOG_PREFIX, 'Consolidation failed:', err);
         toastr.error('Memory consolidation failed. Check console for details.', 'CharMemory');

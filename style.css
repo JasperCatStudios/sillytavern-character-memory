@@ -30,6 +30,60 @@
     min-height: 100px;
 }
 
+/* Stats bar */
+.charMemory_statsBar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin: 4px 0 8px;
+}
+
+.charMemory_statItem {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    background: var(--SmartThemeBlurTintColor, rgba(0, 0, 0, 0.1));
+    border-radius: 4px;
+    padding: 4px 8px;
+    font-size: 0.85em;
+    flex: 1 1 0;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.charMemory_statItem i {
+    opacity: 0.6;
+    flex-shrink: 0;
+}
+
+.charMemory_statItem span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Helper text */
+.charMemory_helperText {
+    display: block;
+    font-size: 0.8em;
+    opacity: 0.5;
+    margin-top: 2px;
+    line-height: 1.3;
+}
+
+/* Separator */
+.charMemory_separator {
+    border: none;
+    border-top: 1px solid var(--SmartThemeBorderColor, rgba(128, 128, 128, 0.2));
+    margin: 10px 0;
+}
+
+/* Danger button */
+.charMemory_dangerBtn {
+    color: var(--SmartThemeQuoteColor, #c44);
+}
+
 /* Diagnostics */
 .charMemory_diagnosticsContent {
     max-height: 400px;

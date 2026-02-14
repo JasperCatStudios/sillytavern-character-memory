@@ -1,86 +1,45 @@
 <div class="charMemory_settings">
     <div class="inline-drawer">
         <div class="inline-drawer-toggle inline-drawer-header">
-            <b>CharMemory</b>
+            <b>Character Memory</b>
             <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
         </div>
         <div class="inline-drawer-content">
 
-            <!-- Memory Status (default open) -->
-            <div class="inline-drawer">
-                <div class="inline-drawer-toggle inline-drawer-header">
-                    <b>Memory Status</b>
-                    <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
+            <!-- Stats bar — always visible -->
+            <div class="charMemory_statsBar">
+                <div class="charMemory_statItem">
+                    <i class="fa-solid fa-file-lines fa-sm"></i>
+                    <span id="charMemory_statFile" title="Active memory file">No character</span>
                 </div>
-                <div class="inline-drawer-content" style="display: block;">
-                    <div class="charMemory_statusRow">
-                        <label class="checkbox_label" for="charMemory_enabled">
-                            <input type="checkbox" id="charMemory_enabled" />
-                            <span>Enable automatic extraction</span>
-                        </label>
-                    </div>
-
-                    <div class="charMemory_statusRow">
-                        <small>Messages since last extraction: <strong id="charMemory_messagesSince">0</strong></small>
-                    </div>
-                    <div class="charMemory_statusRow">
-                        <small>Last extracted at message index: <strong id="charMemory_lastIndex">-1</strong></small>
-                    </div>
-
-                    <div class="charMemory_buttonRow">
-                        <input type="button" id="charMemory_extractNow" class="menu_button" value="Extract Now" />
-                        <input type="button" id="charMemory_manageMemories" class="menu_button" value="Manage Memories" />
-                        <input type="button" id="charMemory_consolidate" class="menu_button" value="Consolidate" />
-                        <input type="button" id="charMemory_resetExtraction" class="menu_button" value="Reset" title="Reset extraction state to re-extract from the beginning" />
-                    </div>
-
-                    <div class="charMemory_sliderRow">
-                        <label for="charMemory_interval">
-                            <small>Extract every <span id="charMemory_intervalValue">10</span> character messages</small>
-                        </label>
-                        <input type="range" id="charMemory_interval" min="3" max="50" step="1" value="10" />
-                    </div>
+                <div class="charMemory_statItem">
+                    <i class="fa-solid fa-brain fa-sm"></i>
+                    <span id="charMemory_statCount" title="Stored memories">0 memories</span>
+                </div>
+                <div class="charMemory_statItem">
+                    <i class="fa-solid fa-hourglass-half fa-sm"></i>
+                    <span id="charMemory_statProgress" title="Messages until next extraction">0 / 10</span>
                 </div>
             </div>
 
-            <!-- Advanced (default closed) -->
-            <div class="inline-drawer">
-                <div class="inline-drawer-toggle inline-drawer-header">
-                    <b>Advanced</b>
-                    <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
-                </div>
-                <div class="inline-drawer-content">
-                    <div class="charMemory_statusRow">
-                        <label class="checkbox_label" for="charMemory_perChat">
-                            <input type="checkbox" id="charMemory_perChat" />
-                            <span>Separate memories per chat</span>
-                        </label>
-                        <small class="charMemory_helperText">When enabled, each conversation gets its own memory file. When disabled, all chats share one memory file per character.</small>
-                    </div>
-                    <div class="charMemory_statusRow">
-                        <label for="charMemory_fileName">
-                            <small>Data Bank file name (override)</small>
-                        </label>
-                        <input type="text" id="charMemory_fileName" class="text_pole" placeholder="(auto-generated from character name)" />
-                        <small class="charMemory_helperText">Leave blank for auto-naming. Set a custom name to override the automatic naming.</small>
-                    </div>
-                </div>
+            <div class="charMemory_statusRow">
+                <label class="checkbox_label" for="charMemory_enabled">
+                    <input type="checkbox" id="charMemory_enabled" />
+                    <span>Enable automatic extraction</span>
+                </label>
             </div>
 
-            <!-- Diagnostics (default closed) -->
-            <div class="inline-drawer">
-                <div class="inline-drawer-toggle inline-drawer-header">
-                    <b>Diagnostics</b>
-                    <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
-                </div>
-                <div class="inline-drawer-content">
-                    <div class="charMemory_buttonRow">
-                        <input type="button" id="charMemory_refreshDiag" class="menu_button" value="Refresh" />
-                    </div>
-                    <div id="charMemory_diagnosticsContent" class="charMemory_diagnosticsContent">
-                        <div class="charMemory_diagEmpty">Click "Refresh" after a generation to see diagnostics.</div>
-                    </div>
-                </div>
+            <div class="charMemory_buttonRow">
+                <input type="button" id="charMemory_extractNow" class="menu_button" value="Extract Now" title="Run memory extraction on recent messages" />
+                <input type="button" id="charMemory_manageMemories" class="menu_button" value="View / Edit" title="Browse and edit stored memories" />
+                <input type="button" id="charMemory_consolidate" class="menu_button" value="Consolidate" title="Merge duplicate and related memories" />
+            </div>
+
+            <div class="charMemory_sliderRow">
+                <label for="charMemory_interval">
+                    <small>Extract every <span id="charMemory_intervalValue">10</span> messages</small>
+                </label>
+                <input type="range" id="charMemory_interval" min="3" max="50" step="1" value="10" />
             </div>
 
             <!-- Settings (default closed) -->
@@ -114,12 +73,55 @@
                         <input type="range" id="charMemory_responseLength" min="100" max="2000" step="50" value="500" />
                     </div>
 
+                    <hr class="charMemory_separator" />
+
+                    <div class="charMemory_statusRow">
+                        <label class="checkbox_label" for="charMemory_perChat">
+                            <input type="checkbox" id="charMemory_perChat" />
+                            <span>Separate memories per chat</span>
+                        </label>
+                        <small class="charMemory_helperText">Each conversation gets its own memory file instead of sharing one per character.</small>
+                    </div>
+
+                    <div class="charMemory_statusRow">
+                        <label for="charMemory_fileName">
+                            <small>File name override</small>
+                        </label>
+                        <input type="text" id="charMemory_fileName" class="text_pole" placeholder="(auto-generated from character name)" />
+                        <small class="charMemory_helperText">Leave blank for auto-naming. Set a custom name to override.</small>
+                    </div>
+
+                    <hr class="charMemory_separator" />
+
                     <div class="charMemory_promptSection">
                         <label for="charMemory_extractionPrompt">
-                            <small>Extraction Prompt</small>
+                            <small>Extraction prompt</small>
                         </label>
                         <textarea id="charMemory_extractionPrompt" class="text_pole textarea_compact" rows="8" placeholder="Enter extraction prompt..."></textarea>
                         <input type="button" id="charMemory_restorePrompt" class="menu_button" value="Restore Default Prompt" />
+                    </div>
+
+                    <hr class="charMemory_separator" />
+
+                    <div class="charMemory_statusRow">
+                        <input type="button" id="charMemory_resetExtraction" class="menu_button charMemory_dangerBtn" value="Clear All Memories" title="Delete all memories and reset extraction state" />
+                        <small class="charMemory_helperText">Deletes the memory file and resets extraction tracking. This cannot be undone.</small>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Diagnostics (default closed) -->
+            <div class="inline-drawer">
+                <div class="inline-drawer-toggle inline-drawer-header">
+                    <b>Diagnostics</b>
+                    <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
+                </div>
+                <div class="inline-drawer-content">
+                    <div class="charMemory_buttonRow">
+                        <input type="button" id="charMemory_refreshDiag" class="menu_button" value="Refresh" />
+                    </div>
+                    <div id="charMemory_diagnosticsContent" class="charMemory_diagnosticsContent">
+                        <div class="charMemory_diagEmpty">Click "Refresh" after a generation to see diagnostics.</div>
                     </div>
                 </div>
             </div>

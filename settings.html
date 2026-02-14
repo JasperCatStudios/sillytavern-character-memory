@@ -16,6 +16,14 @@
                     <i class="fa-solid fa-brain fa-sm"></i>
                     <span id="charMemory_statCount" title="Stored memories">0 memories</span>
                 </div>
+                <div class="charMemory_statItem">
+                    <i class="fa-solid fa-arrows-rotate fa-sm"></i>
+                    <span id="charMemory_statProgress" title="Extraction progress">0/10 msgs</span>
+                </div>
+                <div class="charMemory_statItem">
+                    <i class="fa-solid fa-clock fa-sm"></i>
+                    <span id="charMemory_statCooldown" title="Cooldown status">Ready</span>
+                </div>
             </div>
 
             <div class="charMemory_statusRow">
@@ -37,6 +45,13 @@
                     <small>Extract every <span id="charMemory_intervalValue">10</span> messages</small>
                 </label>
                 <input type="range" id="charMemory_interval" min="3" max="50" step="1" value="10" />
+            </div>
+
+            <div class="charMemory_sliderRow">
+                <label for="charMemory_minCooldown">
+                    <small>Min. cooldown: <span id="charMemory_minCooldownValue">10</span> min</small>
+                </label>
+                <input type="range" id="charMemory_minCooldown" min="0" max="30" step="1" value="10" />
             </div>
 
             <!-- Settings (default closed) -->
@@ -138,34 +153,32 @@
                 </div>
             </div>
 
-            <!-- Activity Log (default closed) -->
+            <!-- Activity & Diagnostics (tabbed, default closed) -->
             <div class="inline-drawer">
                 <div class="inline-drawer-toggle inline-drawer-header">
-                    <b>Activity Log</b>
+                    <b>Activity &amp; Diagnostics</b>
                     <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
                 </div>
                 <div class="inline-drawer-content">
-                    <div class="charMemory_buttonRow">
-                        <input type="button" id="charMemory_clearLog" class="menu_button" value="Clear" />
+                    <div class="charMemory_tabs">
+                        <button class="charMemory_tab active" data-tab="log">Activity Log</button>
+                        <button class="charMemory_tab" data-tab="diag">Diagnostics</button>
                     </div>
-                    <div id="charMemory_activityLog" class="charMemory_activityLog" style="max-height:300px;overflow-y:auto;font-size:0.85em;font-family:monospace;">
-                        <div class="charMemory_diagEmpty">No activity yet.</div>
+                    <div class="charMemory_tabContent" id="charMemory_tabLog">
+                        <div class="charMemory_buttonRow">
+                            <input type="button" id="charMemory_clearLog" class="menu_button" value="Clear" />
+                        </div>
+                        <div id="charMemory_activityLog" class="charMemory_activityLog" style="max-height:300px;overflow-y:auto;font-size:0.85em;font-family:monospace;">
+                            <div class="charMemory_diagEmpty">No activity yet.</div>
+                        </div>
                     </div>
-                </div>
-            </div>
-
-            <!-- Diagnostics (default closed) -->
-            <div class="inline-drawer">
-                <div class="inline-drawer-toggle inline-drawer-header">
-                    <b>Diagnostics</b>
-                    <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
-                </div>
-                <div class="inline-drawer-content">
-                    <div class="charMemory_buttonRow">
-                        <input type="button" id="charMemory_refreshDiag" class="menu_button" value="Refresh" />
-                    </div>
-                    <div id="charMemory_diagnosticsContent" class="charMemory_diagnosticsContent">
-                        <div class="charMemory_diagEmpty">Click "Refresh" after a generation to see diagnostics.</div>
+                    <div class="charMemory_tabContent" id="charMemory_tabDiag" style="display:none;">
+                        <div class="charMemory_buttonRow">
+                            <input type="button" id="charMemory_refreshDiag" class="menu_button" value="Refresh" />
+                        </div>
+                        <div id="charMemory_diagnosticsContent" class="charMemory_diagnosticsContent">
+                            <div class="charMemory_diagEmpty">Click "Refresh" after a generation to see diagnostics.</div>
+                        </div>
                     </div>
                 </div>
             </div>

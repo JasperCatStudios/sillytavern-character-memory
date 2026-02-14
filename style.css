@@ -63,6 +63,35 @@
     text-overflow: ellipsis;
 }
 
+/* Tabs */
+.charMemory_tabs {
+    display: flex;
+    gap: 0;
+    margin-bottom: 6px;
+    border-bottom: 1px solid var(--SmartThemeBorderColor, rgba(128, 128, 128, 0.2));
+}
+
+.charMemory_tab {
+    padding: 6px 14px;
+    font-size: 0.85em;
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    cursor: pointer;
+    opacity: 0.6;
+    color: var(--SmartThemeBodyColor, #ccc);
+    transition: opacity 0.15s, border-color 0.15s;
+}
+
+.charMemory_tab:hover {
+    opacity: 0.85;
+}
+
+.charMemory_tab.active {
+    opacity: 1;
+    border-bottom-color: var(--SmartThemeQuoteColor, #888);
+}
+
 /* Helper text */
 .charMemory_helperText {
     display: block;

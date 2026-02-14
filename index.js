@@ -53,6 +53,7 @@ function getMemoryFileName() {
 let inApiCall = false;
 let lastExtractionResult = null;
 let consolidationBackup = null;
+let lastExtractionTime = 0; // session-only, resets on page load
 
 // ============ Activity Log ============
 
@@ -83,7 +84,7 @@ function updateActivityLogDisplay() {
     $container.html(html);
 }
 
-const defaultExtractionPrompt = `You are a memory extraction assistant. Read the recent chat messages and extract important character memories.
+const defaultExtractionPrompt = `You are a memory extraction assistant. Read the recent chat messages and extract important character memories that would be useful for future conversations.
 
 Character name: {{charName}}
 
@@ -94,23 +95,41 @@ RECENT CHAT MESSAGES:
 {{recentMessages}}
 
 INSTRUCTIONS:
-1. Extract only NEW facts, events, relationships, emotional moments, or significant details NOT already in existing memories.
-2. Summarize in third person. Do NOT copy or quote text from the chat verbatim.
-3. Do NOT use emojis anywhere in the output.
-4. Each memory must be wrapped in <memory></memory> tags.
-5. Inside each <memory> block, use a markdown bulleted list (lines starting with "- ").
-6. Each bullet should be one concise fact or detail about {{char}}.
-7. If nothing genuinely new or significant to extract, respond with exactly: NO_NEW_MEMORIES
-8. Do NOT extract trivial conversation filler.
+1. Extract only NEW facts, events, relationships, emotional developments, or significant details NOT already in existing memories. Focus on what {{char}} would remember or reference later.
+2. Write in past tense. Do not describe {{char}}'s current real-time state or in-progress actions.
+3. Summarize in third person. Do NOT copy or quote dialogue from the chat verbatim.
+4. Do NOT use emojis anywhere in the output.
+5. Each memory must be wrapped in <memory></memory> tags with a markdown bulleted list (lines starting with "- ").
+6. Group related facts into one <memory> block instead of separate entries (e.g. multiple facts about the same event or topic belong together).
+7. Do NOT extract anything that contradicts what actually happened in the conversation.
+8. If nothing genuinely new or significant to extract, respond with exactly: NO_NEW_MEMORIES
+
+FOCUS ON these categories:
+- Life events and backstory reveals
+- Relationships (new connections, changes in feelings, conflicts)
+- Stated preferences, opinions, likes/dislikes
+- Personal history, goals, fears, motivations
+- Emotional developments and turning points
+- Skills, possessions, or status changes
+
+AVOID extracting:
+- Sexual mechanics or play-by-play physical descriptions
+- Temporary states ("is currently cold", "is sitting down")
+- Paraphrased dialogue or conversation filler
+- Scene-setting or atmosphere descriptions
+- Moment-to-moment location tracking
+- Actions with no lasting significance
+
+Each memory block should answer: "What would {{char}} remember or reference about this?"
 
 EXAMPLE OUTPUT FORMAT:
 <memory>
-- {{char}} revealed that she grew up in a coastal village north of the capital.
-- She mentioned having two older brothers who work as fishermen.
+- {{char}} revealed she grew up in a coastal village north of the capital and has two older brothers who work as fishermen.
+- She became visibly upset when her father was mentioned and refused to elaborate.
 </memory>
 <memory>
-- {{char}} became visibly upset when the topic of her father was raised.
-- She refused to elaborate and changed the subject quickly.
+- {{user}} agreed to help {{char}} find the missing heirloom, strengthening their alliance.
+- {{char}} admitted she had been searching alone for months before asking for help.
 </memory>
 
 Output ONLY <memory> blocks (or NO_NEW_MEMORIES). No headers, no commentary, no extra text.`;
@@ -125,7 +144,7 @@ const defaultSettings = {
     enabled: true,
     interval: 10,
     maxMessagesPerExtraction: 20,
-    responseLength: 500,
+    responseLength: 800,
     extractionPrompt: defaultExtractionPrompt,
     source: EXTRACTION_SOURCE.MAIN_LLM,
     fileName: DEFAULT_FILE_NAME,
@@ -137,6 +156,7 @@ const defaultSettings = {
     nanogptFilterOpenSource: false,
     nanogptFilterRoleplay: false,
     nanogptFilterReasoning: false,
+    minCooldownMinutes: 10,
 };
 
 // ============ Structured Memory Helpers ============
@@ -399,6 +419,8 @@ function loadSettings() {
     $('#charMemory_maxMessagesValue').text(extension_settings[MODULE_NAME].maxMessagesPerExtraction);
     $('#charMemory_responseLength').val(extension_settings[MODULE_NAME].responseLength);
     $('#charMemory_responseLengthValue').text(extension_settings[MODULE_NAME].responseLength);
+    $('#charMemory_minCooldown').val(extension_settings[MODULE_NAME].minCooldownMinutes);
+    $('#charMemory_minCooldownValue').text(extension_settings[MODULE_NAME].minCooldownMinutes);
     $('#charMemory_extractionPrompt').val(extension_settings[MODULE_NAME].extractionPrompt);
     $('#charMemory_source').val(extension_settings[MODULE_NAME].source);
     $('#charMemory_fileName').val(extension_settings[MODULE_NAME].fileName);
@@ -423,6 +445,8 @@ function ensureMetadata() {
         };
     }
 }
+
+let cooldownTimerInterval = null;
 
 function updateStatusDisplay() {
     ensureMetadata();
@@ -449,6 +473,43 @@ function updateStatusDisplay() {
     } else {
         $('#charMemory_statCount').text('0 memories');
     }
+
+    // Stats bar: extraction progress
+    const msgsSince = chat_metadata[MODULE_NAME]?.messagesSinceExtraction || 0;
+    const interval = extension_settings[MODULE_NAME]?.interval || 10;
+    $('#charMemory_statProgress').text(`${msgsSince}/${interval} msgs`);
+
+    // Stats bar: cooldown timer
+    updateCooldownDisplay();
+    startCooldownTimer();
+}
+
+function updateCooldownDisplay() {
+    const cooldownMs = (extension_settings[MODULE_NAME]?.minCooldownMinutes || 0) * 60000;
+    if (cooldownMs <= 0 || lastExtractionTime === 0) {
+        $('#charMemory_statCooldown').text('Ready');
+        return;
+    }
+    const elapsed = Date.now() - lastExtractionTime;
+    if (elapsed >= cooldownMs) {
+        $('#charMemory_statCooldown').text('Ready');
+    } else {
+        const remaining = Math.ceil((cooldownMs - elapsed) / 60000);
+        $('#charMemory_statCooldown').text(`${remaining}m cooldown`);
+    }
+}
+
+function startCooldownTimer() {
+    if (cooldownTimerInterval) return;
+    cooldownTimerInterval = setInterval(() => {
+        updateCooldownDisplay();
+        // Stop the timer once cooldown has elapsed
+        const cooldownMs = (extension_settings[MODULE_NAME]?.minCooldownMinutes || 0) * 60000;
+        if (cooldownMs <= 0 || lastExtractionTime === 0 || Date.now() - lastExtractionTime >= cooldownMs) {
+            clearInterval(cooldownTimerInterval);
+            cooldownTimerInterval = null;
+        }
+    }, 15000);
 }
 
 function getCharacterName() {
@@ -795,6 +856,7 @@ async function extractMemories(force = false, endIndex = null) {
 
     try {
         inApiCall = true;
+        lastExtractionTime = Date.now();
         const source = extension_settings[MODULE_NAME].source;
         const sourceLabel = source === EXTRACTION_SOURCE.WEBLLM ? 'WebLLM' : source === EXTRACTION_SOURCE.NANOGPT ? 'NanoGPT' : 'main LLM';
         toastr.info(`Extracting memories via ${sourceLabel}...`, 'CharMemory', { timeOut: 3000 });
@@ -914,6 +976,13 @@ function onCharacterMessageRendered() {
     const interval = extension_settings[MODULE_NAME].interval;
 
     if (count >= interval) {
+        const cooldownMs = (extension_settings[MODULE_NAME].minCooldownMinutes || 0) * 60000;
+        const elapsed = Date.now() - lastExtractionTime;
+        if (cooldownMs > 0 && elapsed < cooldownMs) {
+            const remaining = Math.ceil((cooldownMs - elapsed) / 60000);
+            logActivity(`Extraction skipped: cooldown active (${remaining}m remaining)`, 'warning');
+            return;
+        }
         extractMemories(false);
     }
 }
@@ -1519,6 +1588,13 @@ function setupListeners() {
         saveSettingsDebounced();
     });
 
+    $('#charMemory_minCooldown').off('input').on('input', function () {
+        const val = Number($(this).val());
+        extension_settings[MODULE_NAME].minCooldownMinutes = val;
+        $('#charMemory_minCooldownValue').text(val);
+        saveSettingsDebounced();
+    });
+
     $('#charMemory_responseLength').off('input').on('input', function () {
         const val = Number($(this).val());
         extension_settings[MODULE_NAME].responseLength = val;
@@ -1615,6 +1691,9 @@ function setupListeners() {
             await deleteAttachment(existing, 'character', () => {}, false);
         }
 
+        // Immediately update stats bar to avoid stale async reads
+        $('#charMemory_statCount').text('0 memories');
+        $('#charMemory_statProgress').text(`0/${extension_settings[MODULE_NAME].interval} msgs`);
         updateStatusDisplay();
         toastr.success('Memories cleared and extraction state reset. Next extraction will start from the beginning.', 'CharMemory');
     });
@@ -1634,6 +1713,15 @@ function setupListeners() {
 
     $('#charMemory_consolidate').off('click').on('click', () => consolidateMemories());
     $('#charMemory_undoConsolidate').off('click').on('click', () => undoConsolidation());
+
+    // Tab switching for Activity & Diagnostics panel
+    $('.charMemory_tab').off('click').on('click', function () {
+        const tab = $(this).data('tab');
+        $('.charMemory_tab').removeClass('active');
+        $(this).addClass('active');
+        $('.charMemory_tabContent').hide();
+        $(`#charMemory_tab${tab === 'log' ? 'Log' : 'Diag'}`).show();
+    });
 
     $('#charMemory_refreshDiag').off('click').on('click', function () {
         captureDiagnostics();

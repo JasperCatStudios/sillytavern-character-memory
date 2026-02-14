@@ -32,10 +32,24 @@ const DEFAULT_FILE_NAME = 'char-memories.md';
 const LOG_PREFIX = '[CharMemory]';
 
 function getMemoryFileName() {
-    return extension_settings[MODULE_NAME]?.fileName || DEFAULT_FILE_NAME;
+    const custom = extension_settings[MODULE_NAME]?.fileName;
+    if (custom && custom !== DEFAULT_FILE_NAME) return custom;
+
+    const charName = getCharacterName();
+    if (!charName) return DEFAULT_FILE_NAME;
+
+    const safeName = charName.replace(/[^a-zA-Z0-9_-]/g, '_');
+    const perChat = extension_settings[MODULE_NAME]?.perChat;
+    if (perChat) {
+        const context = getContext();
+        const chatId = context.chatId || 'default';
+        return `${safeName}-chat${chatId}-memories.md`;
+    }
+    return `${safeName}-memories.md`;
 }
 
 let inApiCall = false;
+let lastExtractionResult = null;
 
 const defaultExtractionPrompt = `You are a memory extraction assistant. Read the recent chat messages and extract important character memories.
 
@@ -82,6 +96,7 @@ const defaultSettings = {
     extractionPrompt: defaultExtractionPrompt,
     source: EXTRACTION_SOURCE.MAIN_LLM,
     fileName: DEFAULT_FILE_NAME,
+    perChat: false,
 };
 
 // ============ Structured Memory Helpers ============
@@ -173,8 +188,15 @@ function loadSettings() {
         saveSettingsDebounced();
     }
 
+    // Migrate old hardcoded default fileName so auto-naming kicks in
+    if (extension_settings[MODULE_NAME].fileName === DEFAULT_FILE_NAME) {
+        extension_settings[MODULE_NAME].fileName = '';
+        saveSettingsDebounced();
+    }
+
     // Bind UI elements to settings
     $('#charMemory_enabled').prop('checked', extension_settings[MODULE_NAME].enabled);
+    $('#charMemory_perChat').prop('checked', extension_settings[MODULE_NAME].perChat);
     $('#charMemory_interval').val(extension_settings[MODULE_NAME].interval);
     $('#charMemory_intervalValue').text(extension_settings[MODULE_NAME].interval);
     $('#charMemory_maxMessages').val(extension_settings[MODULE_NAME].maxMessagesPerExtraction);
@@ -420,6 +442,8 @@ async function extractMemories(force = false) {
         let cleanResult = removeReasoningFromString(result);
         cleanResult = cleanResult.trim();
 
+        lastExtractionResult = cleanResult || null;
+
         if (!cleanResult || cleanResult === 'NO_NEW_MEMORIES') {
             console.log(LOG_PREFIX, 'No new memories extracted');
             toastr.info('No new memories found.', 'CharMemory');
@@ -543,6 +567,45 @@ function updateDiagnosticsDisplay() {
     if (lastDiagnostics.timestamp) {
         html += `<div class="charMemory_diagTimestamp">Last capture: ${lastDiagnostics.timestamp}</div>`;
     }
+
+    // Memory Info
+    html += '<div class="charMemory_diagSection"><strong>Memories</strong>';
+    const memFileName = getMemoryFileName();
+    const memAttachment = findMemoryAttachment();
+    html += `<div class="charMemory_diagCard">
+        <div class="charMemory_diagCardTitle">Active file name</div>
+        <div class="charMemory_diagCardContent">${escapeHtml(memFileName)}</div>
+    </div>`;
+    html += `<div class="charMemory_diagCard">
+        <div class="charMemory_diagCardTitle">File status</div>
+        <div class="charMemory_diagCardContent">${memAttachment ? 'Exists in Data Bank' : 'Not found in Data Bank'}</div>
+    </div>`;
+
+    if (memAttachment) {
+        // Read content synchronously from cache is not possible, so show count from last known state
+        // We do an async read and update when available
+        getFileAttachment(memAttachment.url).then(content => {
+            const memories = parseMemories(content || '');
+            const countEl = document.getElementById('charMemory_diagMemoryCount');
+            if (countEl) countEl.textContent = String(memories.length);
+        }).catch(() => {});
+    }
+    const countDisplay = memAttachment ? '...' : '0';
+    html += `<div class="charMemory_diagCard">
+        <div class="charMemory_diagCardTitle">Memory count</div>
+        <div class="charMemory_diagCardContent" id="charMemory_diagMemoryCount">${countDisplay}</div>
+    </div>`;
+
+    if (lastExtractionResult) {
+        const truncated = lastExtractionResult.length > 500
+            ? lastExtractionResult.substring(0, 500) + '...'
+            : lastExtractionResult;
+        html += `<div class="charMemory_diagCard">
+            <div class="charMemory_diagCardTitle">Last extraction result</div>
+            <div class="charMemory_diagCardContent">${escapeHtml(truncated)}</div>
+        </div>`;
+    }
+    html += '</div>';
 
     // World Info Entries
     const wiEntries = lastDiagnostics.worldInfoEntries;
@@ -879,8 +942,13 @@ function setupListeners() {
     });
 
     $('#charMemory_fileName').off('input').on('input', function () {
-        const val = String($(this).val()).trim() || DEFAULT_FILE_NAME;
+        const val = String($(this).val()).trim();
         extension_settings[MODULE_NAME].fileName = val;
+        saveSettingsDebounced();
+    });
+
+    $('#charMemory_perChat').off('change').on('change', function () {
+        extension_settings[MODULE_NAME].perChat = !!$(this).prop('checked');
         saveSettingsDebounced();
     });
 

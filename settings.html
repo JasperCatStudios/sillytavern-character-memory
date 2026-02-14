@@ -51,11 +51,18 @@
                 </div>
                 <div class="inline-drawer-content">
                     <div class="charMemory_statusRow">
-                        <label for="charMemory_fileName">
-                            <small>Data Bank file name</small>
+                        <label class="checkbox_label" for="charMemory_perChat">
+                            <input type="checkbox" id="charMemory_perChat" />
+                            <span>Separate memories per chat</span>
                         </label>
-                        <input type="text" id="charMemory_fileName" class="text_pole" placeholder="char-memories.md" />
-                        <small class="charMemory_helperText">The file name used in the character's Data Bank for storing memories.</small>
+                        <small class="charMemory_helperText">When enabled, each conversation gets its own memory file. When disabled, all chats share one memory file per character.</small>
+                    </div>
+                    <div class="charMemory_statusRow">
+                        <label for="charMemory_fileName">
+                            <small>Data Bank file name (override)</small>
+                        </label>
+                        <input type="text" id="charMemory_fileName" class="text_pole" placeholder="(auto-generated from character name)" />
+                        <small class="charMemory_helperText">Leave blank for auto-naming. Set a custom name to override the automatic naming.</small>
                     </div>
                 </div>
             </div>

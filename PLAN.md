@@ -12,11 +12,14 @@ Core functionality implemented:
 - [x] Memory consolidation (merge duplicates via LLM) with preview and undo
 - [x] Clear All Memories with extraction state reset
 - [x] Customizable extraction prompt with Restore Default
-- [x] Extraction via Main LLM or WebLLM (browser-local)
+- [x] Extraction via Main LLM, WebLLM (browser-local), or NanoGPT (direct API)
+- [x] NanoGPT: API key test button, model filters (subscription, open source, roleplay, reasoning)
+- [x] Activity Log panel with timestamped events for debugging
 - [x] Diagnostics panel (memory info, vectorization status, lorebook entries, extension prompts)
 - [x] `/extract-memories`, `/consolidate-memories`, `/charmemory-debug` slash commands
 - [x] Auto-migration from old `## Memory N` format and flat text
 - [x] Guards: inApiCall, streaming check, context change detection
+- [x] Chat-switch awareness: seeds unextracted message count, only advances lastExtractedIndex on successful extraction
 
 ## Known Issues / To Investigate
 
@@ -32,7 +35,6 @@ Core functionality implemented:
 - [ ] Add error recovery if extraction fails mid-way (don't lose existing file)
 - [ ] Persist diagnostics across page refreshes (save last N to chat_metadata)
 - [ ] Add character name to memory file header for clarity
-- [ ] Handle edge case: first message in a new chat (lastExtractedIndex = -1)
 - [ ] Search within memories from the UI
 
 ### Future — Smarter Extraction
@@ -50,7 +52,7 @@ Core functionality implemented:
 
 - [ ] Per-message diagnostic icon showing what was injected for that generation
 - [ ] Diagnostic diff view: what changed between generations
-- [ ] Log extraction history (what was extracted when, from which messages)
+- [x] Log extraction history (Activity Log panel)
 - [ ] Show token count of current memory file
 
 ### Future Ideas (Not Yet Prioritized)
@@ -97,7 +99,7 @@ sillytavern-character-memory/
 - **Settings**: `extension_settings.charMemory` with defaults merge pattern
 - **Per-chat state**: `chat_metadata.charMemory` with `saveMetadataDebounced()`
 - **Event hooks**: `CHARACTER_MESSAGE_RENDERED` for counting, `WORLD_INFO_ACTIVATED` for diagnostics
-- **LLM calls**: `generateQuietPrompt` (main LLM) or `generateWebLlmChatPrompt` (WebLLM)
+- **LLM calls**: `generateQuietPrompt` (main LLM), `generateWebLlmChatPrompt` (WebLLM), or NanoGPT direct API
 - **Output cleanup**: `removeReasoningFromString` to strip reasoning tags from LLM output
 - **Guards**: `inApiCall` flag, `streamingProcessor.isFinished` check, context change detection
 

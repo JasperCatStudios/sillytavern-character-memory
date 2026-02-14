@@ -7,7 +7,7 @@ Automatically extracts structured character memories from chat and stores them i
 ```
 Chat happens (every N character messages)
     → Extension auto-fires on CHARACTER_MESSAGE_RENDERED
-    → Extracts new memories via main LLM or WebLLM
+    → Extracts new memories via main LLM, WebLLM, or NanoGPT
     → Appends <memory> blocks to character-scoped Data Bank file
     → Vector Storage vectorizes the file automatically
     → Relevant memories retrieved at generation time
@@ -19,6 +19,7 @@ Chat happens (every N character messages)
 - **Consolidation**: Merge duplicate and related memories with preview before applying and one-click undo
 - **Scoped**: Memories are per-character by default, with optional per-chat isolation
 - **Non-destructive**: Only appends, never overwrites existing memories
+- **Multiple LLM sources**: Main LLM, WebLLM (browser-local), or NanoGPT (direct API)
 
 ## Installation
 
@@ -87,7 +88,7 @@ Old `## Memory N` format files are auto-migrated on first read.
 
 | Setting | Default | Description |
 |---------|---------|-------------|
-| Extraction source | Main LLM | Choose between Main LLM or WebLLM (browser-local) |
+| Extraction source | Main LLM | Choose between Main LLM, WebLLM (browser-local), or NanoGPT (direct API) |
 | Interval | 10 | Extract every N character messages |
 | Max messages | 20 | Max messages included per extraction |
 | Response length | 500 | Token limit for LLM extraction response |
@@ -95,11 +96,32 @@ Old `## Memory N` format files are auto-migrated on first read.
 | File name override | (auto) | Custom file name; leave blank for auto-naming from character name |
 | Extraction prompt | (built-in) | Fully customizable, with Restore Default |
 
+### NanoGPT Settings
+
+When NanoGPT is selected as the extraction source, additional settings appear:
+
+| Setting | Description |
+|---------|-------------|
+| API Key | Your NanoGPT API key. Use the **Test** button to verify it works. |
+| Model filters | Filter the model dropdown by: **Subscription** (included in plan), **Open Source**, **Roleplay** (storytelling models), **Reasoning** (models with reasoning capability). Multiple filters combine as intersection. |
+| Model | Select from available NanoGPT text models, grouped by provider |
+| System prompt | Optional override for the system prompt sent with extraction/consolidation calls |
+
+### Activity Log
+
+The Activity Log panel (below Settings) shows timestamped events for debugging:
+
+- Chat switches with character name, chat ID, and message count
+- Extraction state on switch (lastExtractedIndex, unextracted message count)
+- Message collection details (how many messages were gathered, index range)
+- LLM responses (memories saved or NO_NEW_MEMORIES)
+- Errors and warnings
+
 ## Requirements
 
 - SillyTavern with a working LLM API connection
 - Vector Storage extension enabled (for retrieval)
-- No other dependencies
+- For NanoGPT: a NanoGPT API key (no other dependencies)
 
 ## How It Works
 
@@ -129,3 +151,10 @@ The Diagnostics panel shows what was injected into the last generation:
 - **Extension Prompts**: What memory/vector/data bank content was injected
 
 This helps answer "are my memories being vectorized?" and "are my lorebooks even working?" without digging through logs.
+
+## Per-Message Buttons
+
+Each message in the chat gets additional buttons in its action bar:
+
+- **Extract Here** (brain icon, character messages only): Run memory extraction on all messages up to and including this one
+- **Pin as Memory** (bookmark icon, all messages): Manually save a message's text as a memory, with an edit dialog before saving

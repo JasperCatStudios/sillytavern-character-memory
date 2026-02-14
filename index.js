@@ -646,11 +646,8 @@ async function fetchCharacterChats() {
     }
 
     const chats = await response.json();
-    // API returns array of single-key objects like [{filename: {data}}] — flatten
-    return chats.map(c => {
-        const key = Object.keys(c)[0];
-        return { file_name: key, ...c[key] };
-    });
+    if (!Array.isArray(chats)) return [];
+    return chats;
 }
 
 /**

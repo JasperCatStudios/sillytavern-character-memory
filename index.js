@@ -24,6 +24,8 @@ import {
 import { SlashCommandParser } from '../../../slash-commands/SlashCommandParser.js';
 import { SlashCommand } from '../../../slash-commands/SlashCommand.js';
 import { removeReasoningFromString } from '../../../reasoning.js';
+import { callGenericPopup, POPUP_TYPE } from '../../../popup.js';
+import { isWebLlmSupported, generateWebLlmChatPrompt } from '../../shared.js';
 
 const MODULE_NAME = 'charMemory';
 const MEMORY_FILE_NAME = 'char-memories.md';
@@ -52,12 +54,18 @@ INSTRUCTIONS:
 
 Output ONLY the memory paragraphs (or NO_NEW_MEMORIES). No headers, no commentary.`;
 
+const EXTRACTION_SOURCE = {
+    MAIN_LLM: 'main_llm',
+    WEBLLM: 'webllm',
+};
+
 const defaultSettings = {
     enabled: true,
     interval: 10,
     maxMessagesPerExtraction: 20,
     responseLength: 500,
     extractionPrompt: defaultExtractionPrompt,
+    source: EXTRACTION_SOURCE.MAIN_LLM,
 };
 
 // Diagnostics state (session-only, not persisted)
@@ -88,6 +96,7 @@ function loadSettings() {
     $('#charMemory_responseLength').val(extension_settings[MODULE_NAME].responseLength);
     $('#charMemory_responseLengthValue').text(extension_settings[MODULE_NAME].responseLength);
     $('#charMemory_extractionPrompt').val(extension_settings[MODULE_NAME].extractionPrompt);
+    $('#charMemory_source').val(extension_settings[MODULE_NAME].source);
 
     updateStatusDisplay();
 }
@@ -247,13 +256,29 @@ async function extractMemories(force = false) {
 
     try {
         inApiCall = true;
-        toastr.info('Extracting memories...', 'CharMemory', { timeOut: 3000 });
+        const source = extension_settings[MODULE_NAME].source;
+        toastr.info(`Extracting memories via ${source === EXTRACTION_SOURCE.WEBLLM ? 'WebLLM' : 'main LLM'}...`, 'CharMemory', { timeOut: 3000 });
 
-        const result = await generateQuietPrompt({
-            quietPrompt: prompt,
-            skipWIAN: true,
-            responseLength: extension_settings[MODULE_NAME].responseLength,
-        });
+        let result;
+        if (source === EXTRACTION_SOURCE.WEBLLM) {
+            if (!isWebLlmSupported()) {
+                toastr.error('WebLLM is not available in this browser.', 'CharMemory');
+                return;
+            }
+            const messages = [
+                { role: 'system', content: 'You are a memory extraction assistant.' },
+                { role: 'user', content: prompt },
+            ];
+            result = await generateWebLlmChatPrompt(messages, {
+                max_tokens: extension_settings[MODULE_NAME].responseLength,
+            });
+        } else {
+            result = await generateQuietPrompt({
+                quietPrompt: prompt,
+                skipWIAN: true,
+                responseLength: extension_settings[MODULE_NAME].responseLength,
+            });
+        }
 
         // Verify context hasn't changed
         const newContext = getContext();
@@ -470,6 +495,11 @@ function setupListeners() {
         saveSettingsDebounced();
     });
 
+    $('#charMemory_source').off('change').on('change', function () {
+        extension_settings[MODULE_NAME].source = String($(this).val());
+        saveSettingsDebounced();
+    });
+
     $('#charMemory_extractionPrompt').off('input').on('input', function () {
         extension_settings[MODULE_NAME].extractionPrompt = String($(this).val());
         saveSettingsDebounced();
@@ -489,24 +519,7 @@ function setupListeners() {
     $('#charMemory_viewMemories').off('click').on('click', async function () {
         const content = await readMemories();
         const displayContent = content || '(No memories yet)';
-        // Use ST's callGenericPopup if available, otherwise alert
-        if (typeof callGenericPopup === 'function') {
-            callGenericPopup(`<pre style="white-space: pre-wrap; max-height: 60vh; overflow-y: auto;">${escapeHtml(displayContent)}</pre>`, 1);
-        } else {
-            // Fallback: show in a simple modal
-            const modal = $(`<div class="charMemory_modal">
-                <div class="charMemory_modalContent">
-                    <div class="charMemory_modalHeader">
-                        <span>Character Memories</span>
-                        <span class="charMemory_modalClose">&times;</span>
-                    </div>
-                    <pre class="charMemory_modalBody">${escapeHtml(displayContent)}</pre>
-                </div>
-            </div>`);
-            modal.find('.charMemory_modalClose').on('click', () => modal.remove());
-            modal.on('click', (e) => { if (e.target === modal[0]) modal.remove(); });
-            $('body').append(modal);
-        }
+        callGenericPopup(`<pre style="white-space: pre-wrap; max-height: 60vh; overflow-y: auto;">${escapeHtml(displayContent)}</pre>`, POPUP_TYPE.TEXT);
     });
 
     $('#charMemory_refreshDiag').off('click').on('click', function () {

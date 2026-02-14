@@ -64,6 +64,16 @@
                     <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
                 </div>
                 <div class="inline-drawer-content">
+                    <div class="charMemory_statusRow">
+                        <label for="charMemory_source">
+                            <small>Extraction source</small>
+                        </label>
+                        <select id="charMemory_source" class="text_pole">
+                            <option value="main_llm">Main LLM</option>
+                            <option value="webllm">WebLLM (browser-local)</option>
+                        </select>
+                    </div>
+
                     <div class="charMemory_sliderRow">
                         <label for="charMemory_maxMessages">
                             <small>Max messages per extraction: <span id="charMemory_maxMessagesValue">20</span></small>

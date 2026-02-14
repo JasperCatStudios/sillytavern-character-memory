@@ -290,6 +290,22 @@ function collectRecentMessages() {
     return lines.join('\n\n');
 }
 
+// Approximate character limit for WebLLM prompt content (leaves room for response)
+const WEBLLM_MAX_PROMPT_CHARS = 6000;
+
+/**
+ * Truncate a string to a maximum character count, breaking at a newline boundary.
+ * @param {string} text The text to truncate.
+ * @param {number} maxChars Maximum characters.
+ * @returns {string}
+ */
+function truncateText(text, maxChars) {
+    if (!text || text.length <= maxChars) return text;
+    const truncated = text.slice(0, maxChars);
+    const lastNewline = truncated.lastIndexOf('\n');
+    return (lastNewline > maxChars * 0.5 ? truncated.slice(0, lastNewline) : truncated) + '\n[...truncated]';
+}
+
 /**
  * Build the extraction prompt with substitutions.
  * @param {string} existingMemories Current memories content.
@@ -299,11 +315,28 @@ function collectRecentMessages() {
 function buildExtractionPrompt(existingMemories, recentMessages) {
     const charName = getCharacterName() || '{{char}}';
     let prompt = extension_settings[MODULE_NAME].extractionPrompt;
+    const isWebLlm = extension_settings[MODULE_NAME].source === EXTRACTION_SOURCE.WEBLLM;
+
+    let memories = existingMemories || '(none yet)';
+    let messages = recentMessages;
+
+    // Truncate content for WebLLM's smaller context window
+    if (isWebLlm) {
+        const templateLength = prompt.replace(/\{\{charName\}\}/g, charName)
+            .replace(/\{\{existingMemories\}\}/g, '')
+            .replace(/\{\{recentMessages\}\}/g, '').length;
+        const available = Math.max(WEBLLM_MAX_PROMPT_CHARS - templateLength, 1000);
+        // Give 1/3 to existing memories, 2/3 to recent messages
+        const memoriesBudget = Math.floor(available / 3);
+        const messagesBudget = available - memoriesBudget;
+        memories = truncateText(memories, memoriesBudget);
+        messages = truncateText(messages, messagesBudget);
+    }
 
     // Do our custom replacements first
     prompt = prompt.replace(/\{\{charName\}\}/g, charName);
-    prompt = prompt.replace(/\{\{existingMemories\}\}/g, existingMemories || '(none yet)');
-    prompt = prompt.replace(/\{\{recentMessages\}\}/g, recentMessages);
+    prompt = prompt.replace(/\{\{existingMemories\}\}/g, memories);
+    prompt = prompt.replace(/\{\{recentMessages\}\}/g, messages);
 
     // Then let ST handle {{char}}, {{user}}, etc.
     prompt = substituteParamsExtended(prompt);
@@ -668,7 +701,15 @@ async function consolidateMemories() {
     }
 
     const beforeCount = memories.length;
-    const memoriesText = memories.map((m, i) => `[Memory ${i + 1}]\n${m.text}`).join('\n\n');
+    let memoriesText = memories.map((m, i) => `[Memory ${i + 1}]\n${m.text}`).join('\n\n');
+
+    // Truncate for WebLLM's smaller context window
+    const isWebLlm = extension_settings[MODULE_NAME].source === EXTRACTION_SOURCE.WEBLLM;
+    if (isWebLlm) {
+        const templateLength = consolidationPrompt.replace('{{memories}}', '').length;
+        const available = Math.max(WEBLLM_MAX_PROMPT_CHARS - templateLength, 1000);
+        memoriesText = truncateText(memoriesText, available);
+    }
 
     let prompt = consolidationPrompt.replace('{{memories}}', memoriesText);
     prompt = substituteParamsExtended(prompt);
@@ -821,13 +862,20 @@ function setupListeners() {
         extractMemories(true);
     });
 
-    $('#charMemory_resetExtraction').off('click').on('click', function () {
+    $('#charMemory_resetExtraction').off('click').on('click', async function () {
         ensureMetadata();
         chat_metadata[MODULE_NAME].lastExtractedIndex = -1;
         chat_metadata[MODULE_NAME].messagesSinceExtraction = 0;
         saveMetadataDebounced();
+
+        // Also clear stored memories so re-extraction starts fresh
+        const existing = findMemoryAttachment();
+        if (existing) {
+            await deleteAttachment(existing, 'character', () => {}, false);
+        }
+
         updateStatusDisplay();
-        toastr.success('Extraction state reset. Next extraction will start from the beginning.', 'CharMemory');
+        toastr.success('Memories cleared and extraction state reset. Next extraction will start from the beginning.', 'CharMemory');
     });
 
     $('#charMemory_fileName').off('input').on('input', function () {

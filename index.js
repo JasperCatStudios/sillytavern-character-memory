@@ -104,7 +104,7 @@ INSTRUCTIONS:
 3. Summarize in third person. Do NOT copy or quote dialogue from the chat verbatim.
 4. Do NOT use emojis anywhere in the output.
 5. Each memory must be wrapped in <memory></memory> tags with a markdown bulleted list (lines starting with "- ").
-6. Group related facts into one <memory> block instead of separate entries (e.g. multiple facts about the same event or topic belong together).
+6. Use ONE <memory> block per encounter or event. Everything that happened with the same person in the same scene belongs in one block. Do not split a single encounter across multiple blocks.
 7. Do NOT extract anything that contradicts what actually happened in the conversation.
 8. If nothing genuinely new or significant to extract, respond with exactly: NO_NEW_MEMORIES
 
@@ -124,10 +124,13 @@ AVOID extracting:
 - Scene-setting or atmosphere descriptions
 - Moment-to-moment location tracking
 - Actions with no lasting significance
+- Mundane details (routine clothing, weather, small talk, cover stories) unless they played a significant role in the event
 
-NOTE: When an encounter or event is significant, capture the key details that made it memorable — vivid sensory moments, emotional reactions, power dynamics, things that surprised or affected {{char}}. Skip the sequential play-by-play connecting them. Two similar events with different people or contexts are distinct memories.
+NOTE: When an encounter or event is significant, capture the specific details that made it memorable — not generic summaries. Include visceral, sensory, and explicit details where they are what {{char}} would actually remember. "She orgasmed while grinding against his face" is a memory. "She engaged in sexual activity" is not — it's a euphemism that loses the actual experience.
 
-Each memory block should answer: "What would {{char}} remember or reference about this?"
+DO NOT sanitize, euphemize, or generalize. Write what actually happened in concrete terms. Include specific actions, words said, and physical details that made the moment distinct. Two similar events with different people or contexts are distinct memories.
+
+Each memory block should answer: "What would {{char}} remember or reference about this — in their own unfiltered terms?"
 
 EXAMPLE OUTPUT FORMAT:
 <memory>
@@ -135,8 +138,8 @@ EXAMPLE OUTPUT FORMAT:
 - She became visibly upset when her father was mentioned and refused to elaborate.
 </memory>
 <memory>
-- {{user}} agreed to help {{char}} find the missing heirloom, strengthening their alliance.
-- {{char}} admitted she had been searching alone for months before asking for help.
+- {{char}} came hard while riding him, clamping her thighs around his head and grinding against his face until she couldn't speak.
+- She sent a post-orgasm selfie to Ed with the message "Think he'll notice I'm not asking for a condom?" while the other man was out of the room.
 </memory>
 
 Output ONLY <memory> blocks (or NO_NEW_MEMORIES). No headers, no commentary, no extra text.`;

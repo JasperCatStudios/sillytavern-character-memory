@@ -20,6 +20,7 @@ Core functionality implemented:
 - [x] Auto-migration from old `## Memory N` format and flat text
 - [x] Guards: inApiCall, streaming check, context change detection
 - [x] Chat-switch awareness: seeds unextracted message count, only advances lastExtractedIndex on successful extraction
+- [x] Auto-reset stale lastExtractedIndex when no memories exist for current chat
 
 ## Known Issues / To Investigate
 
@@ -27,15 +28,26 @@ Core functionality implemented:
 - [ ] Test behavior when switching characters mid-extraction
 - [ ] Test with very large memory files (performance of delete-then-reupload)
 - [ ] Verify vectorization picks up file changes after re-upload (delete + upload cycle)
+- [ ] Stats bar file status doesn't clear when "Clear All Memories" is used (display not refreshed)
+- [ ] Verify NanoGPT API key is stored securely (currently in extension_settings, same as other ST credentials — check if ST encrypts at rest)
 
 ## Planned Improvements
 
-### Next — Reliability & Polish
+### Next — UX & Polish
 
-- [ ] Add error recovery if extraction fails mid-way (don't lose existing file)
-- [ ] Persist diagnostics across page refreshes (save last N to chat_metadata)
-- [ ] Add character name to memory file header for clarity
+- [ ] Combine Activity Log and Diagnostics into a single unified panel
+- [ ] Richer stats bar: show latest extraction count, chat name; make items clickable to open relevant views (memory manager, memory file, etc.)
+- [ ] Fix stats bar not updating after "Clear All Memories"
 - [ ] Search within memories from the UI
+- [ ] Add error recovery if extraction fails mid-way (don't lose existing file)
+- [ ] Add character name to memory file header for clarity
+
+### Next — Multi-Provider LLM Support
+
+- [ ] Design a provider abstraction so adding new LLM endpoints is straightforward
+- [ ] Consider: OpenAI-compatible endpoints (user-provided URL + key), OpenRouter, local APIs (Ollama, LM Studio)
+- [ ] Shared config pattern: URL, API key, model selector, test button
+- [ ] Provider-specific options (temperature, system prompt override, etc.)
 
 ### Future — Smarter Extraction
 

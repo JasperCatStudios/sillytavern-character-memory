@@ -210,3 +210,30 @@
     font-size: 0.85em;
     min-width: unset;
 }
+
+/* Per-message buttons — inherit .mes_button base styling from ST */
+.charMemory_extractHereBtn,
+.charMemory_pinMemoryBtn {
+    cursor: pointer;
+    opacity: 0.7;
+    transition: opacity 0.15s;
+}
+.charMemory_extractHereBtn:hover,
+.charMemory_pinMemoryBtn:hover {
+    opacity: 1;
+}
+
+/* Memory extracted indicator */
+.charMemory_extractedIndicator {
+    display: inline-flex;
+    align-items: center;
+    margin-left: 4px;
+    opacity: 0.35;
+    color: var(--SmartThemeBodyColor, #ccc);
+    font-size: 0.75em;
+    vertical-align: middle;
+    cursor: default;
+}
+.charMemory_extractedIndicator:hover {
+    opacity: 0.7;
+}

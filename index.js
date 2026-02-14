@@ -362,9 +362,10 @@ async function writeMemories(content) {
 
 /**
  * Collect recent messages for extraction.
+ * @param {number|null} endIndex Optional end message index (inclusive). Defaults to last message.
  * @returns {string} Formatted messages string.
  */
-function collectRecentMessages() {
+function collectRecentMessages(endIndex = null) {
     ensureMetadata();
     const context = getContext();
     const meta = chat_metadata[MODULE_NAME];
@@ -374,10 +375,10 @@ function collectRecentMessages() {
 
     const startIndex = Math.max(0, (meta.lastExtractedIndex || 0) + 1);
     const maxMessages = extension_settings[MODULE_NAME].maxMessagesPerExtraction;
-    const endIndex = chat.length;
+    const end = endIndex !== null ? endIndex + 1 : chat.length;
 
-    // Get messages from startIndex to endIndex, limited by maxMessages
-    const slice = chat.slice(Math.max(startIndex, endIndex - maxMessages), endIndex);
+    // Get messages from startIndex to end, limited by maxMessages
+    const slice = chat.slice(Math.max(startIndex, end - maxMessages), end);
 
     const lines = [];
     for (const msg of slice) {
@@ -445,8 +446,9 @@ function buildExtractionPrompt(existingMemories, recentMessages) {
 /**
  * Run memory extraction.
  * @param {boolean} force If true, ignore interval check.
+ * @param {number|null} endIndex Optional end message index (inclusive). Defaults to last message.
  */
-async function extractMemories(force = false) {
+async function extractMemories(force = false, endIndex = null) {
     if (inApiCall) {
         console.log(LOG_PREFIX, 'Already in API call, skipping');
         return;
@@ -468,7 +470,7 @@ async function extractMemories(force = false) {
         return;
     }
 
-    const recentMessages = collectRecentMessages();
+    const recentMessages = collectRecentMessages(endIndex);
     if (!recentMessages) {
         console.log(LOG_PREFIX, 'No new messages to extract');
         toastr.info('No new messages to extract.', 'CharMemory');
@@ -557,10 +559,11 @@ async function extractMemories(force = false) {
 
         // Update metadata
         ensureMetadata();
-        chat_metadata[MODULE_NAME].lastExtractedIndex = context.chat.length - 1;
+        chat_metadata[MODULE_NAME].lastExtractedIndex = endIndex !== null ? endIndex : context.chat.length - 1;
         chat_metadata[MODULE_NAME].messagesSinceExtraction = 0;
         saveMetadataDebounced();
         updateStatusDisplay();
+        updateAllIndicators();
     } catch (err) {
         console.error(LOG_PREFIX, 'Extraction failed:', err);
         toastr.error('Memory extraction failed. Check console for details.', 'CharMemory');
@@ -596,6 +599,7 @@ function onCharacterMessageRendered() {
  */
 function onChatChanged() {
     updateStatusDisplay();
+    updateAllIndicators();
 }
 
 // ============ Diagnostics ============
@@ -1104,6 +1108,129 @@ function setupListeners() {
     });
 }
 
+// ============ Per-Message Buttons & Indicators ============
+
+/**
+ * Update the memory-extracted indicator on a single message element.
+ * @param {jQuery} mesElement The .mes element.
+ * @param {number} messageIndex The message index in chat.
+ */
+function updateIndicatorForMessage(mesElement, messageIndex) {
+    const $mes = $(mesElement);
+    const $nameBlock = $mes.find('.ch_name');
+    // Remove any existing indicator
+    $nameBlock.find('.charMemory_extractedIndicator').remove();
+
+    ensureMetadata();
+    const lastIdx = chat_metadata[MODULE_NAME]?.lastExtractedIndex ?? -1;
+    if (messageIndex <= lastIdx && messageIndex >= 0) {
+        $nameBlock.append('<span class="charMemory_extractedIndicator" title="Memory extracted"><i class="fa-solid fa-brain fa-xs"></i></span>');
+    }
+}
+
+/**
+ * Update indicators on all rendered messages.
+ */
+function updateAllIndicators() {
+    ensureMetadata();
+    $('#chat .mes').each(function () {
+        const mesId = Number($(this).attr('mesid'));
+        if (isNaN(mesId)) return;
+
+        const context = getContext();
+        const msg = context.chat[mesId];
+        // Only show indicator on character messages
+        if (!msg || msg.is_user || msg.is_system) return;
+
+        updateIndicatorForMessage(this, mesId);
+    });
+}
+
+/**
+ * Add per-message buttons and indicators when a message is rendered.
+ * @param {number} messageIndex The index of the rendered message.
+ */
+function onMessageRenderedAddButtons(messageIndex) {
+    const context = getContext();
+    if (context.characterId === undefined) return;
+
+    const msg = context.chat[messageIndex];
+    if (!msg || msg.is_system) return;
+
+    const $mes = $(`#chat .mes[mesid="${messageIndex}"]`);
+    if (!$mes.length) return;
+
+    const $extraBtns = $mes.find('.extraMesButtons');
+    if (!$extraBtns.length) return;
+
+    // Remove existing extension buttons to prevent duplicates
+    $extraBtns.find('.charMemory_extractHereBtn, .charMemory_pinMemoryBtn').remove();
+
+    // Pin as memory — available on all non-system messages (user + character)
+    $extraBtns.prepend(`<div class="mes_button charMemory_pinMemoryBtn" data-mesid="${messageIndex}" title="Pin as memory"><i class="fa-solid fa-bookmark"></i></div>`);
+
+    // Extract from here — character messages only
+    if (!msg.is_user) {
+        $extraBtns.prepend(`<div class="mes_button charMemory_extractHereBtn" data-mesid="${messageIndex}" title="Extract memories up to here"><i class="fa-solid fa-brain"></i></div>`);
+        updateIndicatorForMessage($mes, messageIndex);
+    }
+}
+
+/**
+ * Click handler for "Extract from here" button.
+ */
+async function onExtractHereClick() {
+    const messageIndex = Number($(this).data('mesid'));
+    if (isNaN(messageIndex)) return;
+    await extractMemories(true, messageIndex);
+}
+
+/**
+ * Click handler for "Pin as memory" button.
+ */
+async function onPinMemoryClick() {
+    const messageIndex = Number($(this).data('mesid'));
+    if (isNaN(messageIndex)) return;
+
+    const context = getContext();
+    const msg = context.chat[messageIndex];
+    if (!msg) return;
+
+    // Strip HTML tags from message text
+    const plainText = msg.mes.replace(/<[^>]*>/g, '').trim();
+    if (!plainText) {
+        toastr.warning('Message has no text content.', 'CharMemory');
+        return;
+    }
+
+    const edited = await callGenericPopup('Edit text to save as a memory:', POPUP_TYPE.INPUT, plainText, { rows: 6 });
+    if (edited === null || edited === false) return; // cancelled
+
+    const text = String(edited).trim();
+    if (!text) return;
+
+    // Parse lines into bullets
+    const bullets = text.split('\n')
+        .map(l => l.trim())
+        .filter(Boolean)
+        .map(l => l.startsWith('- ') ? l.slice(2).trim() : l)
+        .filter(Boolean);
+
+    if (bullets.length === 0) return;
+
+    const now = new Date();
+    const timestamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+    const chatId = context.chatId || 'unknown';
+
+    const existingContent = await readMemories();
+    const blocks = parseMemories(existingContent);
+    blocks.push({ chat: chatId, date: timestamp, bullets });
+    await writeMemories(serializeMemories(blocks));
+
+    toastr.success(`${bullets.length} memor${bullets.length === 1 ? 'y' : 'ies'} pinned!`, 'CharMemory');
+    updateStatusDisplay();
+}
+
 // ============ Init ============
 
 jQuery(async function () {
@@ -1117,6 +1244,12 @@ jQuery(async function () {
     // Event hooks
     eventSource.on(event_types.CHARACTER_MESSAGE_RENDERED, onCharacterMessageRendered);
     eventSource.on(event_types.CHAT_CHANGED, onChatChanged);
+
+    // Per-message buttons and indicators
+    eventSource.on(event_types.CHARACTER_MESSAGE_RENDERED, onMessageRenderedAddButtons);
+    eventSource.on(event_types.USER_MESSAGE_RENDERED, onMessageRenderedAddButtons);
+    $(document).on('click', '.charMemory_extractHereBtn', onExtractHereClick);
+    $(document).on('click', '.charMemory_pinMemoryBtn', onPinMemoryClick);
 
     // Diagnostics hooks
     eventSource.on(event_types.WORLD_INFO_ACTIVATED, onWorldInfoActivated);

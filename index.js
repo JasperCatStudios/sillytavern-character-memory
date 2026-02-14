@@ -49,14 +49,25 @@ RECENT CHAT MESSAGES:
 
 INSTRUCTIONS:
 1. Extract only NEW facts, events, relationships, emotional moments, or significant details NOT already in existing memories.
-2. Write each memory as a third-person narrative paragraph starting with "{{char}} ..." (e.g., "{{char}} remembers...", "{{char}} learned that...", "{{char}} felt...").
-3. Include specific details: names, dates, locations, emotions, actions, and outcomes.
-4. Each memory should be 2-4 self-contained sentences.
-5. If nothing genuinely new or significant to extract, respond with exactly: NO_NEW_MEMORIES
-6. Do NOT extract trivial conversation filler.
-7. Separate each memory with a line containing only \`---\`.
+2. Summarize in third person. Do NOT copy or quote text from the chat verbatim.
+3. Do NOT use emojis anywhere in the output.
+4. Each memory must be wrapped in <memory></memory> tags.
+5. Inside each <memory> block, use a markdown bulleted list (lines starting with "- ").
+6. Each bullet should be one concise fact or detail about {{char}}.
+7. If nothing genuinely new or significant to extract, respond with exactly: NO_NEW_MEMORIES
+8. Do NOT extract trivial conversation filler.
 
-Output ONLY the memory paragraphs (or NO_NEW_MEMORIES). No headers, no commentary.`;
+EXAMPLE OUTPUT FORMAT:
+<memory>
+- {{char}} revealed that she grew up in a coastal village north of the capital.
+- She mentioned having two older brothers who work as fishermen.
+</memory>
+<memory>
+- {{char}} became visibly upset when the topic of her father was raised.
+- She refused to elaborate and changed the subject quickly.
+</memory>
+
+Output ONLY <memory> blocks (or NO_NEW_MEMORIES). No headers, no commentary, no extra text.`;
 
 const EXTRACTION_SOURCE = {
     MAIN_LLM: 'main_llm',
@@ -155,12 +166,10 @@ function loadSettings() {
         }
     }
 
-    // Migrate old default prompt separator instruction
-    const oldInstruction = 'Separate each memory with a blank line.';
-    const newInstruction = 'Separate each memory with a line containing only `---`.';
-    if (extension_settings[MODULE_NAME].extractionPrompt?.includes(oldInstruction)) {
-        extension_settings[MODULE_NAME].extractionPrompt =
-            extension_settings[MODULE_NAME].extractionPrompt.replace(oldInstruction, newInstruction);
+    // Migrate old default prompts that used --- separators to the new <memory> block format
+    const savedPrompt = extension_settings[MODULE_NAME].extractionPrompt || '';
+    if (savedPrompt.includes('Separate each memory with a line containing only')) {
+        extension_settings[MODULE_NAME].extractionPrompt = defaultExtractionPrompt;
         saveSettingsDebounced();
     }
 
@@ -387,12 +396,14 @@ async function extractMemories(force = false) {
             const now = new Date();
             const timestamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 
-            // Split LLM result on --- separators, fall back to blank-line splitting
+            // Parse <memory> blocks; fallback: treat entire result as one entry
             let newEntries;
-            if (cleanResult.includes('---')) {
-                newEntries = cleanResult.split(/^---$/m).map(s => s.trim()).filter(Boolean);
+            const memoryRegex = /<memory>([\s\S]*?)<\/memory>/gi;
+            const matches = [...cleanResult.matchAll(memoryRegex)];
+            if (matches.length > 0) {
+                newEntries = matches.map(m => m[1].trim()).filter(Boolean);
             } else {
-                newEntries = cleanResult.split(/\n\n+/).map(s => s.trim()).filter(Boolean);
+                newEntries = [cleanResult.trim()].filter(Boolean);
             }
 
             for (const entry of newEntries) {
@@ -626,18 +637,21 @@ async function deleteMemory(index) {
 
 // ============ Consolidation ============
 
-const consolidationPrompt = `You are a memory consolidation assistant. Review the following character memories and consolidate them:
+const consolidationPrompt = `You are a memory consolidation assistant. Review the following character memories and consolidate them.
 
+RULES:
 1. Merge duplicate or near-duplicate memories into one.
 2. Combine closely related facts about the same event or topic.
 3. Preserve all unique information — do NOT discard distinct memories.
-4. Write each consolidated memory as a third-person narrative paragraph (2-4 sentences).
-5. Separate each memory with a line containing only \`---\`.
+4. Summarize in third person. Do NOT copy text verbatim from the input.
+5. Do NOT use emojis anywhere in the output.
+6. Each consolidated memory must be wrapped in <memory></memory> tags.
+7. Inside each <memory> block, use a markdown bulleted list (lines starting with "- ").
 
 MEMORIES TO CONSOLIDATE:
 {{memories}}
 
-Output ONLY the consolidated memory paragraphs separated by \`---\`. No headers, no commentary.`;
+Output ONLY <memory> blocks. No headers, no commentary, no extra text.`;
 
 async function consolidateMemories() {
     if (inApiCall) {
@@ -697,10 +711,12 @@ async function consolidateMemories() {
         const timestamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 
         let newEntries;
-        if (cleanResult.includes('---')) {
-            newEntries = cleanResult.split(/^---$/m).map(s => s.trim()).filter(Boolean);
+        const consolidationRegex = /<memory>([\s\S]*?)<\/memory>/gi;
+        const consolidationMatches = [...cleanResult.matchAll(consolidationRegex)];
+        if (consolidationMatches.length > 0) {
+            newEntries = consolidationMatches.map(m => m[1].trim()).filter(Boolean);
         } else {
-            newEntries = cleanResult.split(/\n\n+/).map(s => s.trim()).filter(Boolean);
+            newEntries = [cleanResult.trim()].filter(Boolean);
         }
 
         const consolidated = newEntries.map((text, i) => ({

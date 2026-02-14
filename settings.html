@@ -59,10 +59,19 @@
                         <div id="charMemory_nanogptSettings" style="display:none;">
                             <div class="charMemory_statusRow">
                                 <label><small>NanoGPT API Key</small></label>
-                                <input type="password" id="charMemory_nanogptApiKey" class="text_pole" placeholder="Enter API key" />
+                                <div style="display:flex;gap:5px;align-items:center;">
+                                    <input type="password" id="charMemory_nanogptApiKey" class="text_pole" placeholder="Enter API key" style="flex:1;" />
+                                    <input type="button" id="charMemory_nanogptTest" class="menu_button" value="Test" title="Test API connection" />
+                                </div>
                             </div>
                             <div class="charMemory_statusRow">
                                 <label><small>Model</small></label>
+                                <div class="charMemory_filterRow" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:4px;">
+                                    <label class="checkbox_label"><input type="checkbox" id="charMemory_nanogptFilterSub" /> <small>Subscription</small></label>
+                                    <label class="checkbox_label"><input type="checkbox" id="charMemory_nanogptFilterOS" /> <small>Open Source</small></label>
+                                    <label class="checkbox_label"><input type="checkbox" id="charMemory_nanogptFilterRP" /> <small>Roleplay</small></label>
+                                    <label class="checkbox_label"><input type="checkbox" id="charMemory_nanogptFilterReasoning" /> <small>Reasoning</small></label>
+                                </div>
                                 <select id="charMemory_nanogptModel" class="text_pole">
                                     <option value="">-- Select model --</option>
                                 </select>

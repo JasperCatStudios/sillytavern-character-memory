@@ -104,6 +104,10 @@ const defaultSettings = {
     nanogptApiKey: '',
     nanogptModel: '',
     nanogptSystemPrompt: '',
+    nanogptFilterSubscription: false,
+    nanogptFilterOpenSource: false,
+    nanogptFilterRoleplay: false,
+    nanogptFilterReasoning: false,
 };
 
 // ============ Structured Memory Helpers ============
@@ -244,20 +248,46 @@ function toggleNanoGptSettings(source) {
 }
 
 /**
- * Populate the NanoGPT model dropdown.
+ * Filter NanoGPT models based on active filter toggles.
+ * When multiple filters are active, their intersection is applied.
+ * @param {object[]} models Full model list.
+ * @returns {object[]} Filtered model list.
  */
-async function populateNanoGptModels() {
+function getFilteredNanoGptModels(models) {
+    const s = extension_settings[MODULE_NAME];
+    const hasAnyFilter = s.nanogptFilterSubscription || s.nanogptFilterOpenSource || s.nanogptFilterRoleplay || s.nanogptFilterReasoning;
+    if (!hasAnyFilter) return models;
+
+    return models.filter(m => {
+        if (s.nanogptFilterSubscription && m.subscription !== true) return false;
+        if (s.nanogptFilterOpenSource && m.isOpenSource !== true) return false;
+        if (s.nanogptFilterRoleplay && m.category !== 'Roleplay/storytelling models') return false;
+        if (s.nanogptFilterReasoning && !m.capabilities.includes('reasoning')) return false;
+        return true;
+    });
+}
+
+/**
+ * Populate the NanoGPT model dropdown.
+ * @param {boolean} forceRebuild If true, rebuild dropdown using cached data (skip the "already populated" check).
+ */
+async function populateNanoGptModels(forceRebuild = false) {
     const $select = $('#charMemory_nanogptModel');
-    // Skip if already populated (beyond the default option)
-    if ($select.find('option').length > 1 && !$select.data('needsRefresh')) return;
+    // Skip if already populated (beyond the default option), unless forced
+    if (!forceRebuild && $select.find('option').length > 1 && !$select.data('needsRefresh')) return;
 
     try {
         const models = await fetchNanoGptModels();
+        const filtered = getFilteredNanoGptModels(models);
+
+        // Remember current selection before rebuilding
+        const currentVal = $select.val() || extension_settings[MODULE_NAME].nanogptModel;
+
         $select.empty().append('<option value="">-- Select model --</option>');
 
         // Group by provider
         const byProvider = {};
-        for (const m of models) {
+        for (const m of filtered) {
             if (!byProvider[m.provider]) byProvider[m.provider] = [];
             byProvider[m.provider].push(m);
         }
@@ -271,11 +301,15 @@ async function populateNanoGptModels() {
             $select.append($group);
         }
 
-        // Restore saved selection
-        const saved = extension_settings[MODULE_NAME].nanogptModel;
-        if (saved) {
-            $select.val(saved);
-            updateNanoGptModelInfo(models, saved);
+        // Preserve selected model if still in filtered list; otherwise reset
+        if (currentVal && filtered.some(m => m.id === currentVal)) {
+            $select.val(currentVal);
+            updateNanoGptModelInfo(models, currentVal);
+        } else {
+            $select.val('');
+            extension_settings[MODULE_NAME].nanogptModel = '';
+            saveSettingsDebounced();
+            $('#charMemory_nanogptModelInfo').text('');
         }
 
         $select.data('needsRefresh', false);
@@ -343,6 +377,10 @@ function loadSettings() {
     // NanoGPT settings
     $('#charMemory_nanogptApiKey').val(extension_settings[MODULE_NAME].nanogptApiKey);
     $('#charMemory_nanogptSystemPrompt').val(extension_settings[MODULE_NAME].nanogptSystemPrompt);
+    $('#charMemory_nanogptFilterSub').prop('checked', extension_settings[MODULE_NAME].nanogptFilterSubscription);
+    $('#charMemory_nanogptFilterOS').prop('checked', extension_settings[MODULE_NAME].nanogptFilterOpenSource);
+    $('#charMemory_nanogptFilterRP').prop('checked', extension_settings[MODULE_NAME].nanogptFilterRoleplay);
+    $('#charMemory_nanogptFilterReasoning').prop('checked', extension_settings[MODULE_NAME].nanogptFilterReasoning);
     toggleNanoGptSettings(extension_settings[MODULE_NAME].source);
 
     updateStatusDisplay();
@@ -521,6 +559,10 @@ async function fetchNanoGptModels() {
             maxInputTokens: info.maxInputTokens || 0,
             maxOutputTokens: info.maxOutputTokens || 0,
             subscription: subscriptionIds.has(id),
+            isOpenSource: !!info.isOpenSource,
+            category: info.category || '',
+            capabilities: Array.isArray(info.capabilities) ? info.capabilities : [],
+            costEstimate: info.costEstimate || 0,
         });
     }
 
@@ -571,6 +613,51 @@ async function generateNanoGptResponse(messages, maxTokens) {
 
     const data = await response.json();
     return data.choices?.[0]?.message?.content || '';
+}
+
+/**
+ * Test the NanoGPT API connection with a minimal request.
+ */
+async function testNanoGptConnection() {
+    const apiKey = extension_settings[MODULE_NAME].nanogptApiKey;
+    if (!apiKey) {
+        toastr.error('Enter an API key first.', 'CharMemory');
+        return;
+    }
+
+    const $btn = $('#charMemory_nanogptTest');
+    $btn.prop('disabled', true);
+
+    try {
+        const response = await fetch('https://nano-gpt.com/api/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${apiKey}`,
+            },
+            body: JSON.stringify({
+                model: 'gpt-4.1-nano',
+                messages: [{ role: 'user', content: 'Say OK' }],
+                max_tokens: 3,
+            }),
+        });
+
+        if (!response.ok) {
+            let errorMsg = `HTTP ${response.status}`;
+            try {
+                const errorBody = await response.json();
+                errorMsg = errorBody.error?.message || errorMsg;
+            } catch { /* ignore */ }
+            toastr.error(errorMsg, 'CharMemory');
+            return;
+        }
+
+        toastr.success('Connection successful!', 'CharMemory');
+    } catch (err) {
+        toastr.error(err.message || 'Connection failed', 'CharMemory');
+    } finally {
+        $btn.prop('disabled', false);
+    }
 }
 
 // Approximate character limit for WebLLM prompt content (leaves room for response)
@@ -790,6 +877,18 @@ function onCharacterMessageRendered() {
  * Event handler for CHAT_CHANGED — reset status display.
  */
 function onChatChanged() {
+    // Seed messagesSinceExtraction with unextracted message count so
+    // automatic extraction triggers correctly after switching chats.
+    ensureMetadata();
+    const context = getContext();
+    const meta = chat_metadata[MODULE_NAME];
+    const lastIdx = meta.lastExtractedIndex ?? -1;
+    const unextracted = context.chat ? context.chat.length - 1 - lastIdx : 0;
+    if (unextracted > 0 && meta.messagesSinceExtraction < unextracted) {
+        meta.messagesSinceExtraction = unextracted;
+        saveMetadataDebounced();
+    }
+
     updateStatusDisplay();
     updateAllIndicators();
 }
@@ -1378,6 +1477,32 @@ function setupListeners() {
     $('#charMemory_nanogptSystemPrompt').off('input').on('input', function () {
         extension_settings[MODULE_NAME].nanogptSystemPrompt = String($(this).val());
         saveSettingsDebounced();
+    });
+
+    $('#charMemory_nanogptTest').off('click').on('click', () => testNanoGptConnection());
+
+    $('#charMemory_nanogptFilterSub').off('change').on('change', function () {
+        extension_settings[MODULE_NAME].nanogptFilterSubscription = !!$(this).prop('checked');
+        saveSettingsDebounced();
+        populateNanoGptModels(true);
+    });
+
+    $('#charMemory_nanogptFilterOS').off('change').on('change', function () {
+        extension_settings[MODULE_NAME].nanogptFilterOpenSource = !!$(this).prop('checked');
+        saveSettingsDebounced();
+        populateNanoGptModels(true);
+    });
+
+    $('#charMemory_nanogptFilterRP').off('change').on('change', function () {
+        extension_settings[MODULE_NAME].nanogptFilterRoleplay = !!$(this).prop('checked');
+        saveSettingsDebounced();
+        populateNanoGptModels(true);
+    });
+
+    $('#charMemory_nanogptFilterReasoning').off('change').on('change', function () {
+        extension_settings[MODULE_NAME].nanogptFilterReasoning = !!$(this).prop('checked');
+        saveSettingsDebounced();
+        populateNanoGptModels(true);
     });
 
     $('#charMemory_extractionPrompt').off('input').on('input', function () {

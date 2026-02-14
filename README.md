@@ -16,7 +16,7 @@ Chat happens (every N character messages)
 - **Automatic**: Extracts memories every N character messages (configurable, default 10)
 - **Visible**: Memories stored as a plain markdown file in character Data Bank — fully viewable and editable
 - **Per-bullet management**: Browse, edit, or delete individual memory bullets from the Memory Manager
-- **Consolidation**: Merge duplicate and related memories with a single click
+- **Consolidation**: Merge duplicate and related memories with preview before applying and one-click undo
 - **Scoped**: Memories are per-character by default, with optional per-chat isolation
 - **Non-destructive**: Only appends, never overwrites existing memories
 
@@ -45,7 +45,8 @@ Restart SillyTavern after installation.
 3. Enable automatic extraction (on by default)
 4. Chat normally — memories are extracted automatically every N messages
 5. Use **View / Edit** to browse and manage individual memories
-6. Use **Consolidate** to merge duplicates when the file grows large
+6. Use **Consolidate** to merge duplicates when the file grows large — a Before/After preview is shown before changes are applied
+7. Use **Undo Consolidation** to restore the previous memories if the consolidation result isn't satisfactory
 
 ### Stats Bar
 

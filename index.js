@@ -52,6 +52,7 @@ function getMemoryFileName() {
 
 let inApiCall = false;
 let lastExtractionResult = null;
+let consolidationBackup = null;
 
 const defaultExtractionPrompt = `You are a memory extraction assistant. Read the recent chat messages and extract important character memories.
 
@@ -939,6 +940,37 @@ async function deleteBlock(blockIndex) {
 
 // ============ Consolidation ============
 
+function buildConsolidationPreview(beforeBlocks, afterBlocks, beforeCount, afterCount) {
+    const renderSection = (title, blocks, count) => {
+        const cards = blocks.map(b => {
+            const bullets = b.bullets.map(bullet => `<li>${bullet}</li>`).join('');
+            return `<div class="charMemory_card">
+                <div class="charMemory_cardHeader"><strong>${b.chat}</strong> <span class="charMemory_cardDate">${b.date}</span></div>
+                <ul>${bullets}</ul>
+            </div>`;
+        }).join('');
+        return `<h3>${title} (${count} memories)</h3>${cards}`;
+    };
+    return `<div style="display:flex;gap:1em;">
+        <div style="flex:1;overflow-y:auto;max-height:60vh;">${renderSection('Before', beforeBlocks, beforeCount)}</div>
+        <div style="flex:1;overflow-y:auto;max-height:60vh;">${renderSection('After', afterBlocks, afterCount)}</div>
+    </div>`;
+}
+
+async function undoConsolidation() {
+    if (!consolidationBackup) {
+        toastr.warning('No consolidation to undo.', 'CharMemory');
+        return;
+    }
+    const confirm = await callGenericPopup('Undo the last consolidation and restore previous memories?', POPUP_TYPE.CONFIRM);
+    if (!confirm) return;
+    await writeMemories(consolidationBackup);
+    consolidationBackup = null;
+    $('#charMemory_undoConsolidate').prop('disabled', true);
+    toastr.success('Consolidation undone. Memories restored.', 'CharMemory');
+    updateStatusDisplay();
+}
+
 const consolidationPrompt = `You are a memory consolidation assistant. Review the following character memories and consolidate them.
 
 RULES:
@@ -1037,8 +1069,17 @@ async function consolidateMemories() {
             return { chat: 'consolidated', date: timestamp, bullets: bullets.length > 0 ? bullets : [entry] };
         });
 
-        await writeMemories(serializeMemories(consolidated));
         const afterCount = countMemories(consolidated);
+        const previewHtml = buildConsolidationPreview(memories, consolidated, beforeCount, afterCount);
+        const confirmed = await callGenericPopup(previewHtml, POPUP_TYPE.CONFIRM, '', { wide: true, allowVerticalScrolling: true });
+        if (!confirmed) {
+            toastr.info('Consolidation cancelled.', 'CharMemory');
+            return;
+        }
+
+        consolidationBackup = content;
+        await writeMemories(serializeMemories(consolidated));
+        $('#charMemory_undoConsolidate').prop('disabled', false);
         toastr.success(`Consolidated ${beforeCount} → ${afterCount} memories.`, 'CharMemory');
         console.log(LOG_PREFIX, `Consolidation: ${beforeCount} → ${afterCount}`);
         updateStatusDisplay();
@@ -1164,6 +1205,7 @@ function setupListeners() {
     $('#charMemory_manageMemories').off('click').on('click', () => showMemoryManager());
 
     $('#charMemory_consolidate').off('click').on('click', () => consolidateMemories());
+    $('#charMemory_undoConsolidate').off('click').on('click', () => undoConsolidation());
 
     $('#charMemory_refreshDiag').off('click').on('click', function () {
         captureDiagnostics();

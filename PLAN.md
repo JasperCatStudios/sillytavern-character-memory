@@ -9,7 +9,7 @@ Core functionality implemented:
 - [x] Settings panel with 3 collapsible sections (main, Settings, Diagnostics)
 - [x] Stats bar: file name + total bullet count
 - [x] Memory Manager with grouped cards and per-bullet edit/delete
-- [x] Memory consolidation (merge duplicates via LLM)
+- [x] Memory consolidation (merge duplicates via LLM) with preview and undo
 - [x] Clear All Memories with extraction state reset
 - [x] Customizable extraction prompt with Restore Default
 - [x] Extraction via Main LLM or WebLLM (browser-local)

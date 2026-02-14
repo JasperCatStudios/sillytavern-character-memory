@@ -50,7 +50,7 @@ INSTRUCTIONS:
 4. Each memory should be 2-4 self-contained sentences.
 5. If nothing genuinely new or significant to extract, respond with exactly: NO_NEW_MEMORIES
 6. Do NOT extract trivial conversation filler.
-7. Separate each memory with a blank line.
+7. Separate each memory with a line containing only \`---\`.
 
 Output ONLY the memory paragraphs (or NO_NEW_MEMORIES). No headers, no commentary.`;
 
@@ -67,6 +67,69 @@ const defaultSettings = {
     extractionPrompt: defaultExtractionPrompt,
     source: EXTRACTION_SOURCE.MAIN_LLM,
 };
+
+// ============ Structured Memory Helpers ============
+
+/**
+ * Parse structured memory markdown into an array of memory objects.
+ * @param {string} content Raw markdown content.
+ * @returns {{number: number, timestamp: string, text: string}[]}
+ */
+function parseMemories(content) {
+    if (!content || !content.trim()) return [];
+
+    // Split on ## Memory N headers
+    const parts = content.split(/^## Memory \d+\s*$/m);
+    const memories = [];
+
+    for (let i = 1; i < parts.length; i++) {
+        const part = parts[i].trim();
+        if (!part) continue;
+
+        let timestamp = '';
+        let text = part;
+
+        // Extract timestamp line: _Extracted: ..._
+        const tsMatch = part.match(/^_Extracted:\s*(.+?)_\s*\n/);
+        if (tsMatch) {
+            timestamp = tsMatch[1].trim();
+            text = part.slice(tsMatch[0].length).trim();
+        }
+
+        memories.push({ number: memories.length + 1, timestamp, text });
+    }
+
+    return memories;
+}
+
+/**
+ * Serialize an array of memory objects back to structured markdown.
+ * @param {{number?: number, timestamp: string, text: string}[]} memories
+ * @returns {string}
+ */
+function serializeMemories(memories) {
+    return memories.map((m, i) => {
+        const num = i + 1;
+        return `## Memory ${num}\n_Extracted: ${m.timestamp}_\n\n${m.text}`;
+    }).join('\n\n');
+}
+
+/**
+ * Migrate flat-text memories to structured format if needed.
+ * @param {string} content Existing file content.
+ * @returns {string} Structured content.
+ */
+function migrateMemoriesIfNeeded(content) {
+    if (!content || !content.trim()) return content;
+
+    // Already structured?
+    if (/^## Memory \d+/m.test(content)) return content;
+
+    // Wrap entire content as Memory 1
+    const now = new Date();
+    const timestamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+    return `## Memory 1\n_Extracted: ${timestamp}_\n\n${content.trim()}`;
+}
 
 // Diagnostics state (session-only, not persisted)
 let lastDiagnostics = {
@@ -141,8 +204,18 @@ async function readMemories() {
     if (!attachment) return '';
 
     try {
-        const content = await getFileAttachment(attachment.url);
-        return content || '';
+        let content = await getFileAttachment(attachment.url);
+        content = content || '';
+
+        // Auto-migrate flat text to structured format
+        const migrated = migrateMemoriesIfNeeded(content);
+        if (migrated !== content) {
+            console.log(LOG_PREFIX, 'Migrating memories to structured format');
+            await writeMemories(migrated);
+            return migrated;
+        }
+
+        return content;
     } catch (err) {
         console.error(LOG_PREFIX, 'Failed to read memories file:', err);
         return '';
@@ -294,12 +367,26 @@ async function extractMemories(force = false) {
             console.log(LOG_PREFIX, 'No new memories extracted');
             toastr.info('No new memories found.', 'CharMemory');
         } else {
-            // Append to existing memories
-            const separator = existingMemories ? '\n\n' : '';
-            const newContent = existingMemories + separator + cleanResult;
-            await writeMemories(newContent);
+            // Parse existing memories
+            const existing = parseMemories(existingMemories);
+            const now = new Date();
+            const timestamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+
+            // Split LLM result on --- separators, fall back to blank-line splitting
+            let newEntries;
+            if (cleanResult.includes('---')) {
+                newEntries = cleanResult.split(/^---$/m).map(s => s.trim()).filter(Boolean);
+            } else {
+                newEntries = cleanResult.split(/\n\n+/).map(s => s.trim()).filter(Boolean);
+            }
+
+            for (const entry of newEntries) {
+                existing.push({ number: existing.length + 1, timestamp, text: entry });
+            }
+
+            await writeMemories(serializeMemories(existing));
             console.log(LOG_PREFIX, 'Memories updated successfully');
-            toastr.success('New memories extracted and saved!', 'CharMemory');
+            toastr.success(`${newEntries.length} new memor${newEntries.length === 1 ? 'y' : 'ies'} extracted and saved!`, 'CharMemory');
         }
 
         // Update metadata
@@ -441,6 +528,184 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
+// ============ Memory Manager ============
+
+async function showMemoryManager() {
+    const content = await readMemories();
+    const memories = parseMemories(content);
+
+    if (memories.length === 0) {
+        callGenericPopup('No memories yet.', POPUP_TYPE.TEXT);
+        return;
+    }
+
+    let html = '<div class="charMemory_manager">';
+    for (let i = 0; i < memories.length; i++) {
+        const m = memories[i];
+        html += `<div class="charMemory_card" data-index="${i}">
+            <div class="charMemory_cardHeader">
+                <span class="charMemory_cardTitle">Memory ${i + 1}</span>
+                <span class="charMemory_cardTimestamp">${escapeHtml(m.timestamp)}</span>
+                <span class="charMemory_cardActions">
+                    <button class="charMemory_editBtn menu_button menu_button_icon" data-index="${i}" title="Edit"><i class="fa-solid fa-pencil"></i></button>
+                    <button class="charMemory_deleteBtn menu_button menu_button_icon" data-index="${i}" title="Delete"><i class="fa-solid fa-trash"></i></button>
+                </span>
+            </div>
+            <div class="charMemory_cardBody">${escapeHtml(m.text)}</div>
+        </div>`;
+    }
+    html += '</div>';
+
+    const popup = callGenericPopup(html, POPUP_TYPE.TEXT, '', { wide: true, allowVerticalScrolling: true });
+
+    // Wire up event handlers using delegation
+    $(document).off('click.charMemoryManager').on('click.charMemoryManager', '.charMemory_editBtn', async function (e) {
+        e.stopPropagation();
+        const idx = Number($(this).data('index'));
+        await editMemory(idx);
+    });
+
+    $(document).off('click.charMemoryDelete').on('click.charMemoryDelete', '.charMemory_deleteBtn', async function (e) {
+        e.stopPropagation();
+        const idx = Number($(this).data('index'));
+        await deleteMemory(idx);
+    });
+
+    // Clean up when popup closes
+    popup.finally(() => {
+        $(document).off('click.charMemoryManager');
+        $(document).off('click.charMemoryDelete');
+    });
+}
+
+async function editMemory(index) {
+    const content = await readMemories();
+    const memories = parseMemories(content);
+
+    if (index < 0 || index >= memories.length) return;
+
+    const edited = await callGenericPopup('Edit memory:', POPUP_TYPE.INPUT, memories[index].text, { rows: 6 });
+
+    if (edited === null || edited === false) return; // cancelled
+
+    memories[index].text = String(edited).trim();
+    await writeMemories(serializeMemories(memories));
+    toastr.success('Memory updated.', 'CharMemory');
+    showMemoryManager(); // refresh
+}
+
+async function deleteMemory(index) {
+    const content = await readMemories();
+    const memories = parseMemories(content);
+
+    if (index < 0 || index >= memories.length) return;
+
+    const confirm = await callGenericPopup(`Delete Memory ${index + 1}?`, POPUP_TYPE.CONFIRM);
+    if (!confirm) return;
+
+    memories.splice(index, 1);
+    await writeMemories(serializeMemories(memories));
+    toastr.success('Memory deleted.', 'CharMemory');
+    showMemoryManager(); // refresh
+}
+
+// ============ Consolidation ============
+
+const consolidationPrompt = `You are a memory consolidation assistant. Review the following character memories and consolidate them:
+
+1. Merge duplicate or near-duplicate memories into one.
+2. Combine closely related facts about the same event or topic.
+3. Preserve all unique information — do NOT discard distinct memories.
+4. Write each consolidated memory as a third-person narrative paragraph (2-4 sentences).
+5. Separate each memory with a line containing only \`---\`.
+
+MEMORIES TO CONSOLIDATE:
+{{memories}}
+
+Output ONLY the consolidated memory paragraphs separated by \`---\`. No headers, no commentary.`;
+
+async function consolidateMemories() {
+    if (inApiCall) {
+        toastr.warning('An API call is already in progress.', 'CharMemory');
+        return;
+    }
+
+    const content = await readMemories();
+    const memories = parseMemories(content);
+
+    if (memories.length < 2) {
+        toastr.info('Not enough memories to consolidate.', 'CharMemory');
+        return;
+    }
+
+    const beforeCount = memories.length;
+    const memoriesText = memories.map((m, i) => `[Memory ${i + 1}]\n${m.text}`).join('\n\n');
+
+    let prompt = consolidationPrompt.replace('{{memories}}', memoriesText);
+    prompt = substituteParamsExtended(prompt);
+
+    try {
+        inApiCall = true;
+        const source = extension_settings[MODULE_NAME].source;
+        toastr.info(`Consolidating ${beforeCount} memories via ${source === EXTRACTION_SOURCE.WEBLLM ? 'WebLLM' : 'main LLM'}...`, 'CharMemory', { timeOut: 3000 });
+
+        let result;
+        if (source === EXTRACTION_SOURCE.WEBLLM) {
+            if (!isWebLlmSupported()) {
+                toastr.error('WebLLM is not available in this browser.', 'CharMemory');
+                return;
+            }
+            const messages = [
+                { role: 'system', content: 'You are a memory consolidation assistant.' },
+                { role: 'user', content: prompt },
+            ];
+            result = await generateWebLlmChatPrompt(messages, {
+                max_tokens: extension_settings[MODULE_NAME].responseLength * 2,
+            });
+        } else {
+            result = await generateQuietPrompt({
+                quietPrompt: prompt,
+                skipWIAN: true,
+                responseLength: extension_settings[MODULE_NAME].responseLength * 2,
+            });
+        }
+
+        let cleanResult = removeReasoningFromString(result);
+        cleanResult = cleanResult.trim();
+
+        if (!cleanResult) {
+            toastr.warning('Consolidation returned empty result. Memories unchanged.', 'CharMemory');
+            return;
+        }
+
+        const now = new Date();
+        const timestamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+
+        let newEntries;
+        if (cleanResult.includes('---')) {
+            newEntries = cleanResult.split(/^---$/m).map(s => s.trim()).filter(Boolean);
+        } else {
+            newEntries = cleanResult.split(/\n\n+/).map(s => s.trim()).filter(Boolean);
+        }
+
+        const consolidated = newEntries.map((text, i) => ({
+            number: i + 1,
+            timestamp,
+            text,
+        }));
+
+        await writeMemories(serializeMemories(consolidated));
+        const afterCount = consolidated.length;
+        toastr.success(`Consolidated ${beforeCount} → ${afterCount} memories.`, 'CharMemory');
+        console.log(LOG_PREFIX, `Consolidation: ${beforeCount} → ${afterCount}`);
+    } catch (err) {
+        console.error(LOG_PREFIX, 'Consolidation failed:', err);
+        toastr.error('Memory consolidation failed. Check console for details.', 'CharMemory');
+    } finally {
+        inApiCall = false;
+    }
+}
+
 // ============ Slash Commands ============
 
 function registerSlashCommands() {
@@ -451,6 +716,15 @@ function registerSlashCommands() {
             return '';
         },
         helpString: 'Force memory extraction from recent chat messages.',
+    }));
+
+    SlashCommandParser.addCommandObject(SlashCommand.fromProps({
+        name: 'consolidate-memories',
+        callback: async () => {
+            await consolidateMemories();
+            return '';
+        },
+        helpString: 'Consolidate character memories by merging duplicates and related entries.',
     }));
 
     SlashCommandParser.addCommandObject(SlashCommand.fromProps({
@@ -516,11 +790,9 @@ function setupListeners() {
         extractMemories(true);
     });
 
-    $('#charMemory_viewMemories').off('click').on('click', async function () {
-        const content = await readMemories();
-        const displayContent = content || '(No memories yet)';
-        callGenericPopup(`<pre style="white-space: pre-wrap; max-height: 60vh; overflow-y: auto;">${escapeHtml(displayContent)}</pre>`, POPUP_TYPE.TEXT);
-    });
+    $('#charMemory_manageMemories').off('click').on('click', () => showMemoryManager());
+
+    $('#charMemory_consolidate').off('click').on('click', () => consolidateMemories());
 
     $('#charMemory_refreshDiag').off('click').on('click', function () {
         captureDiagnostics();

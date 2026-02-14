@@ -79,3 +79,54 @@
     font-style: italic;
     margin: 4px 0;
 }
+
+/* Memory Manager Popup */
+.charMemory_manager {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    max-height: 60vh;
+    overflow-y: auto;
+    padding: 4px;
+}
+
+.charMemory_card {
+    background: var(--SmartThemeBlurTintColor, rgba(0, 0, 0, 0.1));
+    border-radius: 6px;
+    padding: 10px 12px;
+}
+
+.charMemory_cardHeader {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+}
+
+.charMemory_cardTitle {
+    font-weight: bold;
+    font-size: 0.95em;
+}
+
+.charMemory_cardTimestamp {
+    font-size: 0.8em;
+    opacity: 0.6;
+    flex: 1;
+}
+
+.charMemory_cardActions {
+    display: flex;
+    gap: 4px;
+}
+
+.charMemory_cardActions .menu_button_icon {
+    padding: 2px 6px;
+    font-size: 0.85em;
+    min-width: unset;
+}
+
+.charMemory_cardBody {
+    font-size: 0.9em;
+    white-space: pre-wrap;
+    line-height: 1.4;
+}

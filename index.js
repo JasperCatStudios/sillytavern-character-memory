@@ -51,6 +51,7 @@ function getMemoryFileName() {
 }
 
 let inApiCall = false;
+let extractionAbortController = null;
 let lastExtractionResult = null;
 let consolidationBackup = null;
 let lastExtractionTime = 0; // session-only, resets on page load
@@ -833,7 +834,15 @@ function buildExtractionPrompt(existingMemories, recentMessages) {
  * @param {boolean} force If true, ignore interval check.
  * @param {number|null} endIndex Optional end message index (inclusive). Defaults to last message.
  */
-async function extractMemories(force = false, endIndex = null) {
+async function extractMemories({
+    force = false,
+    endIndex = null,
+    chatArray = null,
+    chatId = null,
+    lastExtractedIdx = null,
+    onProgress = null,
+    abortSignal = null,
+} = {}) {
     if (inApiCall) {
         console.log(LOG_PREFIX, 'Already in API call, skipping');
         return;
@@ -844,23 +853,36 @@ async function extractMemories(force = false, endIndex = null) {
     }
 
     const context = getContext();
-    if (context.characterId === undefined) {
+    const isActiveChat = !chatArray;
+
+    if (isActiveChat && context.characterId === undefined) {
         console.log(LOG_PREFIX, 'No character selected');
         return;
     }
 
-    // Check streaming
-    if (streamingProcessor && !streamingProcessor.isFinished) {
+    // Check streaming (only relevant for active chat)
+    if (isActiveChat && streamingProcessor && !streamingProcessor.isFinished) {
         console.log(LOG_PREFIX, 'Streaming in progress, skipping');
         return;
     }
 
-    logActivity(`Extraction triggered (${force ? 'manual' : 'auto'}), endIndex=${endIndex ?? 'last'}`);
+    // Determine current lastExtractedIndex
+    let currentLastExtracted;
+    if (lastExtractedIdx !== null) {
+        currentLastExtracted = lastExtractedIdx;
+    } else {
+        ensureMetadata();
+        currentLastExtracted = chat_metadata[MODULE_NAME].lastExtractedIndex || 0;
+    }
 
-    const { text: recentMessages, endIndex: chunkEndIndex } = collectRecentMessages({ endIndex });
-    if (!recentMessages) {
+    // Calculate total unprocessed messages and chunks
+    const chat = chatArray || context.chat;
+    const effectiveEnd = endIndex !== null ? endIndex + 1 : chat.length;
+    const totalUnprocessed = effectiveEnd - (currentLastExtracted + 1);
+
+    if (totalUnprocessed <= 0) {
         console.log(LOG_PREFIX, 'No new messages to extract');
-        logActivity('No new messages to extract — collectRecentMessages returned empty', 'warning');
+        logActivity('No new messages to extract — nothing unprocessed', 'warning');
         if (force) {
             toastr.info('No unprocessed messages. Use "Reset Extraction State" to re-read from the beginning.', 'CharMemory', { timeOut: 5000 });
         } else {
@@ -869,112 +891,182 @@ async function extractMemories(force = false, endIndex = null) {
         return;
     }
 
-    const existingMemories = await readMemories();
-    const prompt = buildExtractionPrompt(existingMemories, recentMessages);
+    const chunkSize = extension_settings[MODULE_NAME].maxMessagesPerExtraction;
+    const totalChunks = Math.ceil(totalUnprocessed / chunkSize);
 
-    // Save context identifiers to check for changes after async call
+    logActivity(`Extraction triggered (${force ? 'manual' : 'auto'}), endIndex=${endIndex ?? 'last'}, totalUnprocessed=${totalUnprocessed}, chunks=${totalChunks}`);
+
+    // Confirmation for large manual extractions (>3 chunks, only when force=true)
+    if (force && totalChunks > 3) {
+        const confirmed = await callGenericPopup(
+            `This will process ${totalUnprocessed} messages in ${totalChunks} chunks. This may take a while. Continue?`,
+            POPUP_TYPE.CONFIRM,
+        );
+        if (!confirmed) {
+            logActivity('Large extraction cancelled by user', 'warning');
+            return;
+        }
+    }
+
+    // Save context identifiers to check for changes after async calls
     const savedCharId = context.characterId;
     const savedChatId = context.chatId;
+    const effectiveChatId = chatId || context.chatId || 'unknown';
+
+    const source = extension_settings[MODULE_NAME].source;
+    const sourceLabel = source === EXTRACTION_SOURCE.WEBLLM ? 'WebLLM' : source === EXTRACTION_SOURCE.NANOGPT ? 'NanoGPT' : 'main LLM';
+
+    let totalMemories = 0;
+    let chunksProcessed = 0;
 
     try {
         inApiCall = true;
         lastExtractionTime = Date.now();
-        const source = extension_settings[MODULE_NAME].source;
-        const sourceLabel = source === EXTRACTION_SOURCE.WEBLLM ? 'WebLLM' : source === EXTRACTION_SOURCE.NANOGPT ? 'NanoGPT' : 'main LLM';
-        toastr.info(`Extracting memories via ${sourceLabel}...`, 'CharMemory', { timeOut: 3000 });
 
-        let result;
-        if (source === EXTRACTION_SOURCE.NANOGPT) {
-            const systemPrompt = extension_settings[MODULE_NAME].nanogptSystemPrompt || 'You are a memory extraction assistant.';
-            const messages = [
-                { role: 'system', content: systemPrompt },
-                { role: 'user', content: prompt },
-            ];
-            result = await generateNanoGptResponse(messages, extension_settings[MODULE_NAME].responseLength);
-        } else if (source === EXTRACTION_SOURCE.WEBLLM) {
-            if (!isWebLlmSupported()) {
-                toastr.error('WebLLM is not available in this browser.', 'CharMemory');
-                return;
-            }
-            const messages = [
-                { role: 'system', content: 'You are a memory extraction assistant.' },
-                { role: 'user', content: prompt },
-            ];
-            result = await generateWebLlmChatPrompt(messages, {
-                max_tokens: extension_settings[MODULE_NAME].responseLength,
-            });
-        } else {
-            result = await generateQuietPrompt({
-                quietPrompt: prompt,
-                skipWIAN: true,
-                responseLength: extension_settings[MODULE_NAME].responseLength,
-            });
-        }
-
-        // Verify context hasn't changed
-        const newContext = getContext();
-        if (newContext.characterId !== savedCharId || newContext.chatId !== savedChatId) {
-            console.log(LOG_PREFIX, 'Context changed during extraction, discarding result');
-            return;
-        }
-
-        let cleanResult = removeReasoningFromString(result);
-        cleanResult = cleanResult.trim();
-
-        lastExtractionResult = cleanResult || null;
-
-        if (!cleanResult || cleanResult === 'NO_NEW_MEMORIES') {
-            console.log(LOG_PREFIX, 'No new memories extracted');
-            logActivity('LLM returned NO_NEW_MEMORIES — lastExtractedIndex not advanced', 'warning');
-            toastr.info('No new memories found.', 'CharMemory');
-        } else {
-            // Parse existing memory blocks
-            const existing = parseMemories(existingMemories);
-            const now = new Date();
-            const timestamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-            const chatId = context.chatId || 'unknown';
-
-            // Parse <memory> blocks from LLM response; fallback: treat entire result as one block
-            const memoryRegex = /<memory>([\s\S]*?)<\/memory>/gi;
-            const matches = [...cleanResult.matchAll(memoryRegex)];
-            const rawEntries = matches.length > 0
-                ? matches.map(m => m[1].trim()).filter(Boolean)
-                : [cleanResult.trim()].filter(Boolean);
-
-            let newBulletCount = 0;
-            for (const entry of rawEntries) {
-                const bullets = entry.split('\n')
-                    .map(l => l.trim())
-                    .filter(l => l.startsWith('- '))
-                    .map(l => l.slice(2).trim())
-                    .filter(Boolean);
-                // If no bullets found, treat the whole entry as a single bullet
-                const finalBullets = bullets.length > 0 ? bullets : [entry];
-                existing.push({ chat: chatId, date: timestamp, bullets: finalBullets });
-                newBulletCount += finalBullets.length;
+        for (let chunk = 0; chunk < totalChunks; chunk++) {
+            // Check abort signal
+            if (abortSignal && abortSignal.aborted) {
+                logActivity(`Extraction aborted after ${chunksProcessed} chunk(s)`, 'warning');
+                toastr.warning(`Extraction stopped after ${chunksProcessed} of ${totalChunks} chunks.`, 'CharMemory');
+                break;
             }
 
-            await writeMemories(serializeMemories(existing));
-            console.log(LOG_PREFIX, 'Memories updated successfully');
-            logActivity(`Saved ${newBulletCount} new memor${newBulletCount === 1 ? 'y' : 'ies'}`, 'success');
-            toastr.success(`${newBulletCount} new memor${newBulletCount === 1 ? 'y' : 'ies'} extracted and saved!`, 'CharMemory');
+            // Show progress toast
+            toastr.info(`Extracting chunk ${chunk + 1}/${totalChunks} via ${sourceLabel}...`, 'CharMemory', { timeOut: 3000 });
 
-            // Only advance lastExtractedIndex when memories were actually found
+            // Call onProgress callback
+            if (onProgress) {
+                onProgress({ chunk: chunk + 1, totalChunks, chunksProcessed, totalMemories });
+            }
+
+            // Collect messages for this chunk
+            const { text: recentMessages, endIndex: chunkEndIndex } = collectRecentMessages({
+                endIndex: endIndex,
+                chatArray: chatArray,
+                lastExtractedIdx: currentLastExtracted,
+            });
+
+            if (!recentMessages) {
+                logActivity(`Chunk ${chunk + 1}: no messages returned, stopping`, 'warning');
+                break;
+            }
+
+            // Build prompt with current memories (re-read each chunk to include newly extracted)
+            const existingMemories = await readMemories();
+            const prompt = buildExtractionPrompt(existingMemories, recentMessages);
+
+            // Call the appropriate LLM
+            let result;
+            if (source === EXTRACTION_SOURCE.NANOGPT) {
+                const systemPrompt = extension_settings[MODULE_NAME].nanogptSystemPrompt || 'You are a memory extraction assistant.';
+                const messages = [
+                    { role: 'system', content: systemPrompt },
+                    { role: 'user', content: prompt },
+                ];
+                result = await generateNanoGptResponse(messages, extension_settings[MODULE_NAME].responseLength);
+            } else if (source === EXTRACTION_SOURCE.WEBLLM) {
+                if (!isWebLlmSupported()) {
+                    toastr.error('WebLLM is not available in this browser.', 'CharMemory');
+                    return { totalMemories, chunksProcessed, lastExtractedIndex: currentLastExtracted };
+                }
+                const messages = [
+                    { role: 'system', content: 'You are a memory extraction assistant.' },
+                    { role: 'user', content: prompt },
+                ];
+                result = await generateWebLlmChatPrompt(messages, {
+                    max_tokens: extension_settings[MODULE_NAME].responseLength,
+                });
+            } else {
+                result = await generateQuietPrompt({
+                    quietPrompt: prompt,
+                    skipWIAN: true,
+                    responseLength: extension_settings[MODULE_NAME].responseLength,
+                });
+            }
+
+            // For active chats: verify context hasn't changed
+            if (isActiveChat) {
+                const newContext = getContext();
+                if (newContext.characterId !== savedCharId || newContext.chatId !== savedChatId) {
+                    console.log(LOG_PREFIX, 'Context changed during extraction, discarding result');
+                    return { totalMemories, chunksProcessed, lastExtractedIndex: currentLastExtracted };
+                }
+            }
+
+            let cleanResult = removeReasoningFromString(result);
+            cleanResult = cleanResult.trim();
+
+            lastExtractionResult = cleanResult || null;
+
+            if (!cleanResult || cleanResult === 'NO_NEW_MEMORIES') {
+                logActivity(`Chunk ${chunk + 1}: LLM returned NO_NEW_MEMORIES — advancing index anyway`);
+            } else {
+                // Parse existing memory blocks (re-read to get latest)
+                const currentMemories = await readMemories();
+                const existing = parseMemories(currentMemories);
+                const now = new Date();
+                const timestamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+
+                // Parse <memory> blocks from LLM response; fallback: treat entire result as one block
+                const memoryRegex = /<memory>([\s\S]*?)<\/memory>/gi;
+                const matches = [...cleanResult.matchAll(memoryRegex)];
+                const rawEntries = matches.length > 0
+                    ? matches.map(m => m[1].trim()).filter(Boolean)
+                    : [cleanResult.trim()].filter(Boolean);
+
+                let newBulletCount = 0;
+                for (const entry of rawEntries) {
+                    const bullets = entry.split('\n')
+                        .map(l => l.trim())
+                        .filter(l => l.startsWith('- '))
+                        .map(l => l.slice(2).trim())
+                        .filter(Boolean);
+                    // If no bullets found, treat the whole entry as a single bullet
+                    const finalBullets = bullets.length > 0 ? bullets : [entry];
+                    existing.push({ chat: effectiveChatId, date: timestamp, bullets: finalBullets });
+                    newBulletCount += finalBullets.length;
+                }
+
+                await writeMemories(serializeMemories(existing));
+                totalMemories += newBulletCount;
+                logActivity(`Chunk ${chunk + 1}: saved ${newBulletCount} new memor${newBulletCount === 1 ? 'y' : 'ies'}`, 'success');
+            }
+
+            // Advance lastExtractedIndex after each chunk
+            currentLastExtracted = chunkEndIndex !== -1 ? chunkEndIndex : effectiveEnd - 1;
+
+            // For active chats: save to chat_metadata
+            if (isActiveChat) {
+                ensureMetadata();
+                chat_metadata[MODULE_NAME].lastExtractedIndex = currentLastExtracted;
+                logActivity(`Advanced lastExtractedIndex to ${currentLastExtracted}`);
+            }
+
+            chunksProcessed++;
+        }
+
+        // Final status updates
+        if (isActiveChat) {
             ensureMetadata();
-            chat_metadata[MODULE_NAME].lastExtractedIndex = chunkEndIndex !== -1 ? chunkEndIndex : context.chat.length - 1;
-            logActivity(`Advanced lastExtractedIndex to ${chat_metadata[MODULE_NAME].lastExtractedIndex}`);
+            chat_metadata[MODULE_NAME].messagesSinceExtraction = 0;
+            saveMetadataDebounced();
         }
 
-        // Always reset message counter to prevent re-trigger loops
-        ensureMetadata();
-        chat_metadata[MODULE_NAME].messagesSinceExtraction = 0;
-        saveMetadataDebounced();
         updateStatusDisplay();
         updateAllIndicators();
+
+        if (totalMemories > 0) {
+            toastr.success(`${totalMemories} memor${totalMemories === 1 ? 'y' : 'ies'} extracted in ${chunksProcessed} chunk(s).`, 'CharMemory');
+        } else if (chunksProcessed > 0) {
+            toastr.info('No new memories found.', 'CharMemory');
+        }
+
+        return { totalMemories, chunksProcessed, lastExtractedIndex: currentLastExtracted };
     } catch (err) {
         console.error(LOG_PREFIX, 'Extraction failed:', err);
         logActivity(`Extraction failed: ${err.message}`, 'error');
         toastr.error('Memory extraction failed. Check console for details.', 'CharMemory');
+        return { totalMemories, chunksProcessed, lastExtractedIndex: currentLastExtracted };
     } finally {
         inApiCall = false;
     }
@@ -1005,7 +1097,7 @@ function onCharacterMessageRendered() {
             logActivity(`Extraction skipped: cooldown active (${remaining}m remaining)`, 'warning');
             return;
         }
-        extractMemories(false);
+        extractMemories({ force: false });
     }
 }
 
@@ -1564,7 +1656,7 @@ function registerSlashCommands() {
     SlashCommandParser.addCommandObject(SlashCommand.fromProps({
         name: 'extract-memories',
         callback: async () => {
-            await extractMemories(true);
+            await extractMemories({ force: true });
             return '';
         },
         helpString: 'Force memory extraction from recent chat messages.',
@@ -1694,7 +1786,7 @@ function setupListeners() {
     });
 
     $('#charMemory_extractNow').off('click').on('click', function () {
-        extractMemories(true);
+        extractMemories({ force: true });
     });
 
     $('#charMemory_resetTracking').off('click').on('click', function () {
@@ -1867,7 +1959,7 @@ function onMessageRenderedAddButtons(messageIndex) {
 async function onExtractHereClick() {
     const messageIndex = Number($(this).data('mesid'));
     if (isNaN(messageIndex)) return;
-    await extractMemories(true, messageIndex);
+    await extractMemories({ force: true, endIndex: messageIndex });
 }
 
 /**

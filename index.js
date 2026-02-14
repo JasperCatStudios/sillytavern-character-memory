@@ -518,7 +518,7 @@ function setupListeners() {
 // ============ Init ============
 
 jQuery(async function () {
-    const settingsHtml = await renderExtensionTemplateAsync('third-party/CharMemory', 'settings');
+    const settingsHtml = await renderExtensionTemplateAsync('third-party/sillytavern-character-memory', 'settings');
     $('#extensions_settings2').append(settingsHtml);
 
     loadSettings();

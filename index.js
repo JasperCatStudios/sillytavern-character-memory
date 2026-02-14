@@ -51,7 +51,6 @@ function getMemoryFileName() {
 }
 
 let inApiCall = false;
-let extractionAbortController = null;
 let lastExtractionResult = null;
 let consolidationBackup = null;
 let lastExtractionTime = 0; // session-only, resets on page load
@@ -594,7 +593,7 @@ function collectRecentMessages({ endIndex = null, chatArray = null, lastExtracte
     const chat = chatArray || context.chat;
     const lastExtracted = lastExtractedIdx !== null ? lastExtractedIdx : (function () {
         ensureMetadata();
-        return chat_metadata[MODULE_NAME].lastExtractedIndex || 0;
+        return chat_metadata[MODULE_NAME].lastExtractedIndex ?? -1;
     })();
 
     if (!chat || chat.length === 0) return { text: '', startIndex: -1, endIndex: -1 };
@@ -909,13 +908,15 @@ async function extractMemories({
     onProgress = null,
     abortSignal = null,
 } = {}) {
+    const noopResult = { totalMemories: 0, chunksProcessed: 0, lastExtractedIndex: lastExtractedIdx ?? -1 };
+
     if (inApiCall) {
         console.log(LOG_PREFIX, 'Already in API call, skipping');
-        return;
+        return noopResult;
     }
 
     if (!extension_settings[MODULE_NAME].enabled && !force) {
-        return;
+        return noopResult;
     }
 
     const context = getContext();
@@ -923,13 +924,13 @@ async function extractMemories({
 
     if (isActiveChat && context.characterId === undefined) {
         console.log(LOG_PREFIX, 'No character selected');
-        return;
+        return noopResult;
     }
 
     // Check streaming (only relevant for active chat)
     if (isActiveChat && streamingProcessor && !streamingProcessor.isFinished) {
         console.log(LOG_PREFIX, 'Streaming in progress, skipping');
-        return;
+        return noopResult;
     }
 
     // Determine current lastExtractedIndex
@@ -938,7 +939,7 @@ async function extractMemories({
         currentLastExtracted = lastExtractedIdx;
     } else {
         ensureMetadata();
-        currentLastExtracted = chat_metadata[MODULE_NAME].lastExtractedIndex || 0;
+        currentLastExtracted = chat_metadata[MODULE_NAME].lastExtractedIndex ?? -1;
     }
 
     // Calculate total unprocessed messages and chunks
@@ -954,7 +955,7 @@ async function extractMemories({
         } else {
             toastr.info('No new messages to extract.', 'CharMemory');
         }
-        return;
+        return noopResult;
     }
 
     const chunkSize = extension_settings[MODULE_NAME].maxMessagesPerExtraction;
@@ -963,7 +964,7 @@ async function extractMemories({
     logActivity(`Extraction triggered (${force ? 'manual' : 'auto'}), endIndex=${endIndex ?? 'last'}, totalUnprocessed=${totalUnprocessed}, chunks=${totalChunks}`);
 
     // Confirmation for large manual extractions (>3 chunks, only when force=true)
-    if (force && totalChunks > 3) {
+    if (force && totalChunks > 3 && !abortSignal) {
         const confirmed = await callGenericPopup(
             `This will process ${totalUnprocessed} messages in ${totalChunks} chunks. This may take a while. Continue?`,
             POPUP_TYPE.CONFIRM,
@@ -1105,6 +1106,7 @@ async function extractMemories({
             if (isActiveChat) {
                 ensureMetadata();
                 chat_metadata[MODULE_NAME].lastExtractedIndex = currentLastExtracted;
+                saveMetadataDebounced();
                 logActivity(`Advanced lastExtractedIndex to ${currentLastExtracted}`);
             }
 
@@ -1931,7 +1933,7 @@ function setupListeners() {
         $('.charMemory_batchChatCheck').prop('checked', checked);
         updateBatchButtons();
     });
-    $(document).on('change', '.charMemory_batchChatCheck', updateBatchButtons);
+    $(document).off('change', '.charMemory_batchChatCheck').on('change', '.charMemory_batchChatCheck', updateBatchButtons);
 }
 
 // ============ Per-Message Buttons & Indicators ============
@@ -2113,10 +2115,12 @@ async function loadBatchChatList() {
         const label = isCurrent ? `${name} (current)` : name;
         const lastMsg = chat.last_mes ? new Date(chat.last_mes).toLocaleDateString() : '';
 
+        const safeName = name.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+        const safeLabel = label.replace(/&/g, '&amp;').replace(/</g, '&lt;');
         return `<div class="charMemory_batchChatItem">
             <label class="checkbox_label">
-                <input type="checkbox" class="charMemory_batchChatCheck" data-filename="${name}" checked />
-                <span class="charMemory_batchChatName" title="${name}">${label}</span>
+                <input type="checkbox" class="charMemory_batchChatCheck" data-filename="${safeName}" checked />
+                <span class="charMemory_batchChatName" title="${safeName}">${safeLabel}</span>
             </label>
             <span class="charMemory_batchChatMeta">${count} msgs${lastMsg ? ' | ' + lastMsg : ''}</span>
         </div>`;
@@ -2139,6 +2143,12 @@ async function runBatchExtraction() {
     });
 
     if (selected.length === 0) return;
+
+    const confirmed = await callGenericPopup(
+        `Extract memories from ${selected.length} chat(s)? This may make multiple API calls per chat.`,
+        POPUP_TYPE.CONFIRM,
+    );
+    if (!confirmed) return;
 
     batchAbortController = new AbortController();
     const $progress = $('#charMemory_batchProgress');

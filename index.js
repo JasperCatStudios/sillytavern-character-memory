@@ -1899,13 +1899,15 @@ function setupListeners() {
     $('#charMemory_consolidate').off('click').on('click', () => consolidateMemories());
     $('#charMemory_undoConsolidate').off('click').on('click', () => undoConsolidation());
 
-    // Tab switching for Activity & Diagnostics panel
+    // Tab switching for Activity, Diagnostics & Batch panels
     $('.charMemory_tab').off('click').on('click', function () {
         const tab = $(this).data('tab');
         $('.charMemory_tab').removeClass('active');
         $(this).addClass('active');
         $('.charMemory_tabContent').hide();
-        $(`#charMemory_tab${tab === 'log' ? 'Log' : 'Diag'}`).show();
+        const capName = tab.charAt(0).toUpperCase() + tab.slice(1);
+        $(`#charMemory_tab${capName}`).show();
+        if (tab === 'batch') loadBatchChatList();
     });
 
     $('#charMemory_refreshDiag').off('click').on('click', function () {
@@ -1917,6 +1919,19 @@ function setupListeners() {
         activityLog = [];
         updateActivityLogDisplay();
     });
+
+    // Batch Extract tab
+    $('#charMemory_batchRefresh').off('click').on('click', loadBatchChatList);
+    $('#charMemory_batchExtract').off('click').on('click', runBatchExtraction);
+    $('#charMemory_batchStop').off('click').on('click', function () {
+        if (batchAbortController) batchAbortController.abort();
+    });
+    $('#charMemory_batchSelectAll').off('change').on('change', function () {
+        const checked = $(this).prop('checked');
+        $('.charMemory_batchChatCheck').prop('checked', checked);
+        updateBatchButtons();
+    });
+    $(document).on('change', '.charMemory_batchChatCheck', updateBatchButtons);
 }
 
 // ============ Per-Message Buttons & Indicators ============
@@ -2071,6 +2086,148 @@ async function onPinMemoryClick() {
     await writeMemories(serializeMemories(blocks));
 
     toastr.success(`${bullets.length} memor${bullets.length === 1 ? 'y' : 'ies'} pinned!`, 'CharMemory');
+    updateStatusDisplay();
+}
+
+// ============ Batch Extraction ============
+
+let batchAbortController = null;
+
+async function loadBatchChatList() {
+    const $list = $('#charMemory_batchChatList');
+    $list.html('<div class="charMemory_diagEmpty">Loading...</div>');
+
+    const chats = await fetchCharacterChats();
+    if (chats.length === 0) {
+        $list.html('<div class="charMemory_diagEmpty">No chats found for this character.</div>');
+        return;
+    }
+
+    const context = getContext();
+    const currentChatId = context.chatId;
+
+    const html = chats.map(chat => {
+        const name = chat.file_name.replace('.jsonl', '');
+        const count = chat.chat_items || '?';
+        const isCurrent = name === currentChatId;
+        const label = isCurrent ? `${name} (current)` : name;
+        const lastMsg = chat.last_mes ? new Date(chat.last_mes).toLocaleDateString() : '';
+
+        return `<div class="charMemory_batchChatItem">
+            <label class="checkbox_label">
+                <input type="checkbox" class="charMemory_batchChatCheck" data-filename="${name}" checked />
+                <span class="charMemory_batchChatName" title="${name}">${label}</span>
+            </label>
+            <span class="charMemory_batchChatMeta">${count} msgs${lastMsg ? ' | ' + lastMsg : ''}</span>
+        </div>`;
+    }).join('');
+
+    $list.html(html);
+    $('#charMemory_batchSelectAll').prop('checked', true);
+    updateBatchButtons();
+}
+
+function updateBatchButtons() {
+    const anyChecked = $('.charMemory_batchChatCheck:checked').length > 0;
+    $('#charMemory_batchExtract').prop('disabled', !anyChecked);
+}
+
+async function runBatchExtraction() {
+    const selected = [];
+    $('.charMemory_batchChatCheck:checked').each(function () {
+        selected.push(String($(this).data('filename')));
+    });
+
+    if (selected.length === 0) return;
+
+    batchAbortController = new AbortController();
+    const $progress = $('#charMemory_batchProgress');
+    const $progressText = $progress.find('.charMemory_batchProgressText');
+    const $progressFill = $progress.find('.charMemory_batchProgressFill');
+    $progress.show();
+    $progressFill.css('width', '0%');
+    $('#charMemory_batchStop').show();
+    $('#charMemory_batchExtract').prop('disabled', true);
+    $('#charMemory_batchRefresh').prop('disabled', true);
+
+    let totalMemories = 0;
+    const context = getContext();
+    const currentChatId = context.chatId;
+
+    logActivity(`Batch extraction started: ${selected.length} chat(s) selected`);
+
+    for (let i = 0; i < selected.length; i++) {
+        if (batchAbortController.signal.aborted) break;
+
+        const chatName = selected[i];
+        const pct = Math.round((i / selected.length) * 100);
+        $progressText.text(`Chat ${i + 1}/${selected.length}: ${chatName}`);
+        $progressFill.css('width', `${pct}%`);
+
+        logActivity(`Batch: starting chat "${chatName}" (${i + 1}/${selected.length})`);
+
+        // If this is the current chat, use the active context
+        if (chatName === currentChatId) {
+            const result = await extractMemories({
+                force: true,
+                abortSignal: batchAbortController.signal,
+                onProgress: ({ chunk, totalChunks }) => {
+                    $progressText.text(`Chat ${i + 1}/${selected.length}: ${chatName} (chunk ${chunk}/${totalChunks})`);
+                },
+            });
+            totalMemories += result.totalMemories;
+            continue;
+        }
+
+        // Fetch chat from server
+        const chatData = await fetchChatMessages(chatName);
+        if (!chatData || chatData.messages.length === 0) {
+            logActivity(`Batch: chat "${chatName}" has no messages, skipping`, 'warning');
+            continue;
+        }
+
+        // Get batch extraction state for this chat
+        const batchStateKey = `${getCharacterName()}:${chatName}`;
+        if (!extension_settings[MODULE_NAME].batchState) {
+            extension_settings[MODULE_NAME].batchState = {};
+        }
+        const lastIdx = extension_settings[MODULE_NAME].batchState[batchStateKey]?.lastExtractedIndex ?? -1;
+
+        const result = await extractMemories({
+            force: true,
+            chatArray: chatData.messages,
+            chatId: chatName,
+            lastExtractedIdx: lastIdx,
+            abortSignal: batchAbortController.signal,
+            onProgress: ({ chunk, totalChunks }) => {
+                $progressText.text(`Chat ${i + 1}/${selected.length}: ${chatName} (chunk ${chunk}/${totalChunks})`);
+            },
+        });
+
+        // Save batch state
+        if (result.lastExtractedIndex !== undefined) {
+            extension_settings[MODULE_NAME].batchState[batchStateKey] = {
+                lastExtractedIndex: result.lastExtractedIndex,
+            };
+            saveSettingsDebounced();
+        }
+
+        totalMemories += result.totalMemories;
+    }
+
+    // Done
+    $progressFill.css('width', '100%');
+    const aborted = batchAbortController.signal.aborted;
+    $progressText.text(aborted
+        ? `Stopped. ${totalMemories} memories extracted before cancellation.`
+        : `Done! ${totalMemories} memories extracted from ${selected.length} chat(s).`
+    );
+    $('#charMemory_batchStop').hide();
+    $('#charMemory_batchExtract').prop('disabled', false);
+    $('#charMemory_batchRefresh').prop('disabled', false);
+    batchAbortController = null;
+
+    logActivity(`Batch extraction ${aborted ? 'stopped' : 'complete'}: ${totalMemories} memories from ${selected.length} chats`, aborted ? 'warning' : 'success');
     updateStatusDisplay();
 }
 

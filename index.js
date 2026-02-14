@@ -582,35 +582,43 @@ async function writeMemories(content) {
 
 /**
  * Collect recent messages for extraction.
- * @param {number|null} endIndex Optional end message index (inclusive). Defaults to last message.
- * @returns {string} Formatted messages string.
+ * @param {Object} options
+ * @param {number|null} options.endIndex Optional end message index (inclusive). Defaults to last message.
+ * @param {Array|null} options.chatArray Optional external chat array. Defaults to context.chat.
+ * @param {number|null} options.lastExtractedIdx Optional last extracted index. Defaults to metadata value.
+ * @returns {{ text: string, startIndex: number, endIndex: number }} Formatted messages string and index range.
  */
-function collectRecentMessages(endIndex = null) {
-    ensureMetadata();
+function collectRecentMessages({ endIndex = null, chatArray = null, lastExtractedIdx = null } = {}) {
     const context = getContext();
-    const meta = chat_metadata[MODULE_NAME];
-    const chat = context.chat;
+    const chat = chatArray || context.chat;
+    const lastExtracted = lastExtractedIdx !== null ? lastExtractedIdx : (function () {
+        ensureMetadata();
+        return chat_metadata[MODULE_NAME].lastExtractedIndex || 0;
+    })();
 
-    if (!chat || chat.length === 0) return '';
+    if (!chat || chat.length === 0) return { text: '', startIndex: -1, endIndex: -1 };
 
-    const startIndex = Math.max(0, (meta.lastExtractedIndex || 0) + 1);
+    const startIndex = Math.max(0, lastExtracted + 1);
     const maxMessages = extension_settings[MODULE_NAME].maxMessagesPerExtraction;
     const end = endIndex !== null ? endIndex + 1 : chat.length;
 
-    logActivity(`collectRecentMessages: lastExtractedIndex=${meta.lastExtractedIndex}, startIndex=${startIndex}, end=${end}, chatLength=${chat.length}`);
+    if (startIndex >= end) return { text: '', startIndex: -1, endIndex: -1 };
 
-    // Get messages from startIndex to end, limited by maxMessages
-    const sliceStart = Math.max(startIndex, end - maxMessages);
-    const slice = chat.slice(sliceStart, end);
+    logActivity(`collectRecentMessages: lastExtracted=${lastExtracted}, startIndex=${startIndex}, end=${end}, chatLength=${chat.length}`);
+
+    // Take a chunk of maxMessages starting from startIndex (NOT from end)
+    const sliceEnd = Math.min(startIndex + maxMessages, end);
+    const slice = chat.slice(startIndex, sliceEnd);
 
     const lines = [];
     for (const msg of slice) {
         if (msg.is_system) continue;
-        lines.push(`${msg.name}: ${msg.mes}`);
+        const text = msg.mes ? msg.mes.replace(/<[^>]*>/g, '').trim() : '';
+        if (text) lines.push(`${msg.name}: ${text}`);
     }
 
-    logActivity(`Collected ${lines.length} messages (indices ${sliceStart}-${end - 1})`);
-    return lines.join('\n\n');
+    logActivity(`Collected ${lines.length} messages (indices ${startIndex}-${sliceEnd - 1})`);
+    return { text: lines.join('\n\n'), startIndex, endIndex: sliceEnd - 1 };
 }
 
 // ============ NanoGPT API Helpers ============
@@ -849,7 +857,7 @@ async function extractMemories(force = false, endIndex = null) {
 
     logActivity(`Extraction triggered (${force ? 'manual' : 'auto'}), endIndex=${endIndex ?? 'last'}`);
 
-    const recentMessages = collectRecentMessages(endIndex);
+    const { text: recentMessages, endIndex: chunkEndIndex } = collectRecentMessages({ endIndex });
     if (!recentMessages) {
         console.log(LOG_PREFIX, 'No new messages to extract');
         logActivity('No new messages to extract — collectRecentMessages returned empty', 'warning');
@@ -953,7 +961,7 @@ async function extractMemories(force = false, endIndex = null) {
 
             // Only advance lastExtractedIndex when memories were actually found
             ensureMetadata();
-            chat_metadata[MODULE_NAME].lastExtractedIndex = endIndex !== null ? endIndex : context.chat.length - 1;
+            chat_metadata[MODULE_NAME].lastExtractedIndex = chunkEndIndex !== -1 ? chunkEndIndex : context.chat.length - 1;
             logActivity(`Advanced lastExtractedIndex to ${chat_metadata[MODULE_NAME].lastExtractedIndex}`);
         }
 

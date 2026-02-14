@@ -31,6 +31,7 @@
                         <input type="button" id="charMemory_extractNow" class="menu_button" value="Extract Now" />
                         <input type="button" id="charMemory_manageMemories" class="menu_button" value="Manage Memories" />
                         <input type="button" id="charMemory_consolidate" class="menu_button" value="Consolidate" />
+                        <input type="button" id="charMemory_resetExtraction" class="menu_button" value="Reset" title="Reset extraction state to re-extract from the beginning" />
                     </div>
 
                     <div class="charMemory_sliderRow">
@@ -38,6 +39,23 @@
                             <small>Extract every <span id="charMemory_intervalValue">10</span> character messages</small>
                         </label>
                         <input type="range" id="charMemory_interval" min="3" max="50" step="1" value="10" />
+                    </div>
+                </div>
+            </div>
+
+            <!-- Advanced (default closed) -->
+            <div class="inline-drawer">
+                <div class="inline-drawer-toggle inline-drawer-header">
+                    <b>Advanced</b>
+                    <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
+                </div>
+                <div class="inline-drawer-content">
+                    <div class="charMemory_statusRow">
+                        <label for="charMemory_fileName">
+                            <small>Data Bank file name</small>
+                        </label>
+                        <input type="text" id="charMemory_fileName" class="text_pole" placeholder="char-memories.md" />
+                        <small class="charMemory_helperText">The file name used in the character's Data Bank for storing memories.</small>
                     </div>
                 </div>
             </div>

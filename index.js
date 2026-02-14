@@ -28,8 +28,12 @@ import { callGenericPopup, POPUP_TYPE } from '../../../popup.js';
 import { isWebLlmSupported, generateWebLlmChatPrompt } from '../../shared.js';
 
 const MODULE_NAME = 'charMemory';
-const MEMORY_FILE_NAME = 'char-memories.md';
+const DEFAULT_FILE_NAME = 'char-memories.md';
 const LOG_PREFIX = '[CharMemory]';
+
+function getMemoryFileName() {
+    return extension_settings[MODULE_NAME]?.fileName || DEFAULT_FILE_NAME;
+}
 
 let inApiCall = false;
 
@@ -66,6 +70,7 @@ const defaultSettings = {
     responseLength: 500,
     extractionPrompt: defaultExtractionPrompt,
     source: EXTRACTION_SOURCE.MAIN_LLM,
+    fileName: DEFAULT_FILE_NAME,
 };
 
 // ============ Structured Memory Helpers ============
@@ -150,6 +155,15 @@ function loadSettings() {
         }
     }
 
+    // Migrate old default prompt separator instruction
+    const oldInstruction = 'Separate each memory with a blank line.';
+    const newInstruction = 'Separate each memory with a line containing only `---`.';
+    if (extension_settings[MODULE_NAME].extractionPrompt?.includes(oldInstruction)) {
+        extension_settings[MODULE_NAME].extractionPrompt =
+            extension_settings[MODULE_NAME].extractionPrompt.replace(oldInstruction, newInstruction);
+        saveSettingsDebounced();
+    }
+
     // Bind UI elements to settings
     $('#charMemory_enabled').prop('checked', extension_settings[MODULE_NAME].enabled);
     $('#charMemory_interval').val(extension_settings[MODULE_NAME].interval);
@@ -160,6 +174,7 @@ function loadSettings() {
     $('#charMemory_responseLengthValue').text(extension_settings[MODULE_NAME].responseLength);
     $('#charMemory_extractionPrompt').val(extension_settings[MODULE_NAME].extractionPrompt);
     $('#charMemory_source').val(extension_settings[MODULE_NAME].source);
+    $('#charMemory_fileName').val(extension_settings[MODULE_NAME].fileName);
 
     updateStatusDisplay();
 }
@@ -192,7 +207,7 @@ function getCharacterName() {
  */
 function findMemoryAttachment() {
     const attachments = getDataBankAttachmentsForSource('character');
-    return attachments.find(a => a.name === MEMORY_FILE_NAME) || null;
+    return attachments.find(a => a.name === getMemoryFileName()) || null;
 }
 
 /**
@@ -234,7 +249,7 @@ async function writeMemories(content) {
     }
 
     // Upload new file
-    const file = new File([content], MEMORY_FILE_NAME, { type: 'text/plain' });
+    const file = new File([content], getMemoryFileName(), { type: 'text/plain' });
     await uploadFileAttachmentToServer(file, 'character');
 }
 
@@ -788,6 +803,21 @@ function setupListeners() {
 
     $('#charMemory_extractNow').off('click').on('click', function () {
         extractMemories(true);
+    });
+
+    $('#charMemory_resetExtraction').off('click').on('click', function () {
+        ensureMetadata();
+        chat_metadata[MODULE_NAME].lastExtractedIndex = -1;
+        chat_metadata[MODULE_NAME].messagesSinceExtraction = 0;
+        saveMetadataDebounced();
+        updateStatusDisplay();
+        toastr.success('Extraction state reset. Next extraction will start from the beginning.', 'CharMemory');
+    });
+
+    $('#charMemory_fileName').off('input').on('input', function () {
+        const val = String($(this).val()).trim() || DEFAULT_FILE_NAME;
+        extension_settings[MODULE_NAME].fileName = val;
+        saveSettingsDebounced();
     });
 
     $('#charMemory_manageMemories').off('click').on('click', () => showMemoryManager());

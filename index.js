@@ -794,10 +794,13 @@ async function showMemoryManager() {
             <div class="charMemory_cardHeader">
                 <span class="charMemory_cardTitle">${escapeHtml(chatLabel)}</span>
                 <span class="charMemory_cardTimestamp">${escapeHtml(b.date)}</span>
+                <span class="charMemory_cardActions">
+                    <button class="charMemory_deleteBlockBtn menu_button menu_button_icon" data-block="${bi}" title="Delete all memories from this chat"><i class="fa-solid fa-trash"></i></button>
+                </span>
             </div>
             <div class="charMemory_cardBullets">`;
         for (let bui = 0; bui < b.bullets.length; bui++) {
-            html += `<div class="charMemory_bulletRow">
+            html += `<div class="charMemory_bulletRow" data-block="${bi}" data-bullet="${bui}">
                 <span class="charMemory_bulletText">- ${escapeHtml(b.bullets[bui])}</span>
                 <span class="charMemory_bulletActions">
                     <button class="charMemory_editBtn menu_button menu_button_icon" data-block="${bi}" data-bullet="${bui}" title="Edit"><i class="fa-solid fa-pencil"></i></button>
@@ -826,10 +829,28 @@ async function showMemoryManager() {
         await deleteMemory(blockIdx, bulletIdx);
     });
 
+    $(document).off('click.charMemoryDeleteBlock').on('click.charMemoryDeleteBlock', '.charMemory_deleteBlockBtn', async function (e) {
+        e.stopPropagation();
+        const blockIdx = Number($(this).data('block'));
+        await deleteBlock(blockIdx);
+    });
+
     // Clean up when popup closes
     popup.finally(() => {
         $(document).off('click.charMemoryManager');
         $(document).off('click.charMemoryDelete');
+        $(document).off('click.charMemoryDeleteBlock');
+    });
+}
+
+function reindexManager() {
+    $('.charMemory_manager .charMemory_card').each(function (ci) {
+        $(this).attr('data-block', ci);
+        $(this).find('.charMemory_deleteBlockBtn').attr('data-block', ci);
+        $(this).find('.charMemory_bulletRow').each(function (ri) {
+            $(this).attr('data-block', ci).attr('data-bullet', ri);
+            $(this).find('.charMemory_editBtn, .charMemory_deleteBtn').attr('data-block', ci).attr('data-bullet', ri);
+        });
     });
 }
 
@@ -845,10 +866,14 @@ async function editMemory(blockIndex, bulletIndex) {
 
     if (edited === null || edited === false) return; // cancelled
 
-    block.bullets[bulletIndex] = String(edited).trim();
+    const newText = String(edited).trim();
+    block.bullets[bulletIndex] = newText;
     await writeMemories(serializeMemories(blocks));
     toastr.success('Memory updated.', 'CharMemory');
-    showMemoryManager(); // refresh
+
+    // Update DOM in place
+    const $row = $(`.charMemory_bulletRow[data-block="${blockIndex}"][data-bullet="${bulletIndex}"]`);
+    $row.find('.charMemory_bulletText').text('- ' + newText);
 }
 
 async function deleteMemory(blockIndex, bulletIndex) {
@@ -871,7 +896,45 @@ async function deleteMemory(blockIndex, bulletIndex) {
 
     await writeMemories(serializeMemories(blocks));
     toastr.success('Memory deleted.', 'CharMemory');
-    showMemoryManager(); // refresh
+
+    // Update DOM in place
+    const $row = $(`.charMemory_bulletRow[data-block="${blockIndex}"][data-bullet="${bulletIndex}"]`);
+    const $card = $row.closest('.charMemory_card');
+    $row.remove();
+
+    if ($card.find('.charMemory_bulletRow').length === 0) {
+        $card.remove();
+    }
+
+    if ($('.charMemory_manager .charMemory_card').length === 0) {
+        $('.charMemory_manager').html('<div style="text-align:center;padding:1em;">No memories yet.</div>');
+    }
+
+    reindexManager();
+}
+
+async function deleteBlock(blockIndex) {
+    const content = await readMemories();
+    const blocks = parseMemories(content);
+
+    if (blockIndex < 0 || blockIndex >= blocks.length) return;
+    const block = blocks[blockIndex];
+
+    const confirm = await callGenericPopup(`Delete all ${block.bullets.length} memories from this chat?`, POPUP_TYPE.CONFIRM);
+    if (!confirm) return;
+
+    blocks.splice(blockIndex, 1);
+    await writeMemories(serializeMemories(blocks));
+    toastr.success('Chat memories deleted.', 'CharMemory');
+
+    // Update DOM in place
+    $(`.charMemory_card[data-block="${blockIndex}"]`).remove();
+
+    if ($('.charMemory_manager .charMemory_card').length === 0) {
+        $('.charMemory_manager').html('<div style="text-align:center;padding:1em;">No memories yet.</div>');
+    }
+
+    reindexManager();
 }
 
 // ============ Consolidation ============

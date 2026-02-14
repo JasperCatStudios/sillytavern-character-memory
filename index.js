@@ -89,6 +89,7 @@ Output ONLY <memory> blocks (or NO_NEW_MEMORIES). No headers, no commentary, no 
 const EXTRACTION_SOURCE = {
     MAIN_LLM: 'main_llm',
     WEBLLM: 'webllm',
+    NANOGPT: 'nanogpt',
 };
 
 const defaultSettings = {
@@ -100,6 +101,9 @@ const defaultSettings = {
     source: EXTRACTION_SOURCE.MAIN_LLM,
     fileName: DEFAULT_FILE_NAME,
     perChat: false,
+    nanogptApiKey: '',
+    nanogptModel: '',
+    nanogptSystemPrompt: '',
 };
 
 // ============ Structured Memory Helpers ============
@@ -227,6 +231,78 @@ let lastDiagnostics = {
 };
 let diagnosticsHistory = [];
 
+/**
+ * Toggle NanoGPT settings panel visibility and load models if needed.
+ * @param {string} source Current extraction source value.
+ */
+function toggleNanoGptSettings(source) {
+    const isNanoGpt = source === EXTRACTION_SOURCE.NANOGPT;
+    $('#charMemory_nanogptSettings').toggle(isNanoGpt);
+    if (isNanoGpt) {
+        populateNanoGptModels();
+    }
+}
+
+/**
+ * Populate the NanoGPT model dropdown.
+ */
+async function populateNanoGptModels() {
+    const $select = $('#charMemory_nanogptModel');
+    // Skip if already populated (beyond the default option)
+    if ($select.find('option').length > 1 && !$select.data('needsRefresh')) return;
+
+    try {
+        const models = await fetchNanoGptModels();
+        $select.empty().append('<option value="">-- Select model --</option>');
+
+        // Group by provider
+        const byProvider = {};
+        for (const m of models) {
+            if (!byProvider[m.provider]) byProvider[m.provider] = [];
+            byProvider[m.provider].push(m);
+        }
+
+        for (const [provider, providerModels] of Object.entries(byProvider)) {
+            const $group = $(`<optgroup label="${escapeHtml(provider)}">`);
+            for (const m of providerModels) {
+                const subTag = m.subscription ? ' [Sub]' : '';
+                $group.append(`<option value="${escapeHtml(m.id)}">${escapeHtml(m.name)} (${m.cost})${subTag}</option>`);
+            }
+            $select.append($group);
+        }
+
+        // Restore saved selection
+        const saved = extension_settings[MODULE_NAME].nanogptModel;
+        if (saved) {
+            $select.val(saved);
+            updateNanoGptModelInfo(models, saved);
+        }
+
+        $select.data('needsRefresh', false);
+    } catch (err) {
+        console.error(LOG_PREFIX, 'Failed to fetch NanoGPT models:', err);
+        toastr.error('Failed to load NanoGPT models. Check console.', 'CharMemory');
+    }
+}
+
+/**
+ * Update the model info text below the dropdown.
+ * @param {{id: string, name: string, cost: string, provider: string, maxInputTokens: number, maxOutputTokens: number}[]} models
+ * @param {string} modelId
+ */
+function updateNanoGptModelInfo(models, modelId) {
+    const info = models.find(m => m.id === modelId);
+    if (info) {
+        const parts = [`Provider: ${info.provider}`, `Cost: ${info.cost}`];
+        if (info.maxInputTokens) parts.push(`Input: ${info.maxInputTokens.toLocaleString()} tokens`);
+        if (info.maxOutputTokens) parts.push(`Output: ${info.maxOutputTokens.toLocaleString()} tokens`);
+        parts.push(info.subscription ? 'Included in subscription' : 'Pay-per-use');
+        $('#charMemory_nanogptModelInfo').text(parts.join(' | '));
+    } else {
+        $('#charMemory_nanogptModelInfo').text('');
+    }
+}
+
 function loadSettings() {
     if (!extension_settings[MODULE_NAME]) {
         extension_settings[MODULE_NAME] = {};
@@ -263,6 +339,11 @@ function loadSettings() {
     $('#charMemory_extractionPrompt').val(extension_settings[MODULE_NAME].extractionPrompt);
     $('#charMemory_source').val(extension_settings[MODULE_NAME].source);
     $('#charMemory_fileName').val(extension_settings[MODULE_NAME].fileName);
+
+    // NanoGPT settings
+    $('#charMemory_nanogptApiKey').val(extension_settings[MODULE_NAME].nanogptApiKey);
+    $('#charMemory_nanogptSystemPrompt').val(extension_settings[MODULE_NAME].nanogptSystemPrompt);
+    toggleNanoGptSettings(extension_settings[MODULE_NAME].source);
 
     updateStatusDisplay();
 }
@@ -390,6 +471,108 @@ function collectRecentMessages(endIndex = null) {
     return lines.join('\n\n');
 }
 
+// ============ NanoGPT API Helpers ============
+
+let cachedNanoGptModels = null;
+
+/**
+ * Fetch available text models from NanoGPT, with subscription status.
+ * @returns {Promise<{id: string, name: string, cost: string, provider: string, subscription: boolean, maxInputTokens: number, maxOutputTokens: number}[]>}
+ */
+async function fetchNanoGptModels() {
+    if (cachedNanoGptModels) return cachedNanoGptModels;
+
+    // Fetch full model list and subscription model list in parallel
+    const [modelsResponse, subResponse] = await Promise.all([
+        fetch('https://nano-gpt.com/api/models'),
+        fetch('https://nano-gpt.com/api/subscription/v1/models').catch(() => null),
+    ]);
+
+    if (!modelsResponse.ok) {
+        throw new Error(`Failed to fetch NanoGPT models: ${modelsResponse.status} ${modelsResponse.statusText}`);
+    }
+
+    const data = await modelsResponse.json();
+    const textModels = data?.models?.text;
+    if (!textModels || typeof textModels !== 'object') {
+        throw new Error('Unexpected NanoGPT models response format');
+    }
+
+    // Build set of subscription model IDs
+    const subscriptionIds = new Set();
+    if (subResponse && subResponse.ok) {
+        try {
+            const subData = await subResponse.json();
+            const subModels = subData?.data || [];
+            for (const m of subModels) {
+                if (m.id) subscriptionIds.add(m.id);
+            }
+        } catch { /* ignore parse error */ }
+    }
+
+    const models = [];
+    for (const [id, info] of Object.entries(textModels)) {
+        if (!info.visible) continue;
+        models.push({
+            id,
+            name: info.name || id,
+            cost: info.inputCost != null ? `$${info.inputCost}/${info.outputCost}` : 'N/A',
+            provider: info.provider || 'unknown',
+            maxInputTokens: info.maxInputTokens || 0,
+            maxOutputTokens: info.maxOutputTokens || 0,
+            subscription: subscriptionIds.has(id),
+        });
+    }
+
+    models.sort((a, b) => a.provider.localeCompare(b.provider) || a.name.localeCompare(b.name));
+    cachedNanoGptModels = models;
+    return models;
+}
+
+/**
+ * Generate a response using NanoGPT's OpenAI-compatible API.
+ * @param {{role: string, content: string}[]} messages Chat messages.
+ * @param {number} maxTokens Max tokens for response.
+ * @returns {Promise<string>} The assistant's response content.
+ */
+async function generateNanoGptResponse(messages, maxTokens) {
+    const apiKey = extension_settings[MODULE_NAME].nanogptApiKey;
+    const model = extension_settings[MODULE_NAME].nanogptModel;
+
+    if (!apiKey) {
+        throw new Error('NanoGPT API key is not set. Configure it in Character Memory settings.');
+    }
+    if (!model) {
+        throw new Error('NanoGPT model is not selected. Choose a model in Character Memory settings.');
+    }
+
+    const response = await fetch('https://nano-gpt.com/api/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+            model,
+            messages,
+            max_tokens: maxTokens,
+            temperature: 0.3,
+        }),
+    });
+
+    if (!response.ok) {
+        let errorMsg = `NanoGPT API error: ${response.status}`;
+        try {
+            const errorBody = await response.json();
+            errorMsg += ` — ${errorBody.error?.message || JSON.stringify(errorBody)}`;
+        } catch { /* ignore parse error */ }
+        throw new Error(errorMsg);
+    }
+
+    const data = await response.json();
+    return data.choices?.[0]?.message?.content || '';
+}
+
 // Approximate character limit for WebLLM prompt content (leaves room for response)
 const WEBLLM_MAX_PROMPT_CHARS = 6000;
 
@@ -488,10 +671,18 @@ async function extractMemories(force = false, endIndex = null) {
     try {
         inApiCall = true;
         const source = extension_settings[MODULE_NAME].source;
-        toastr.info(`Extracting memories via ${source === EXTRACTION_SOURCE.WEBLLM ? 'WebLLM' : 'main LLM'}...`, 'CharMemory', { timeOut: 3000 });
+        const sourceLabel = source === EXTRACTION_SOURCE.WEBLLM ? 'WebLLM' : source === EXTRACTION_SOURCE.NANOGPT ? 'NanoGPT' : 'main LLM';
+        toastr.info(`Extracting memories via ${sourceLabel}...`, 'CharMemory', { timeOut: 3000 });
 
         let result;
-        if (source === EXTRACTION_SOURCE.WEBLLM) {
+        if (source === EXTRACTION_SOURCE.NANOGPT) {
+            const systemPrompt = extension_settings[MODULE_NAME].nanogptSystemPrompt || 'You are a memory extraction assistant.';
+            const messages = [
+                { role: 'system', content: systemPrompt },
+                { role: 'user', content: prompt },
+            ];
+            result = await generateNanoGptResponse(messages, extension_settings[MODULE_NAME].responseLength);
+        } else if (source === EXTRACTION_SOURCE.WEBLLM) {
             if (!isWebLlmSupported()) {
                 toastr.error('WebLLM is not available in this browser.', 'CharMemory');
                 return;
@@ -1020,10 +1211,19 @@ async function consolidateMemories() {
     try {
         inApiCall = true;
         const source = extension_settings[MODULE_NAME].source;
-        toastr.info(`Consolidating ${beforeCount} memories via ${source === EXTRACTION_SOURCE.WEBLLM ? 'WebLLM' : 'main LLM'}...`, 'CharMemory', { timeOut: 3000 });
+        const sourceLabel = source === EXTRACTION_SOURCE.WEBLLM ? 'WebLLM' : source === EXTRACTION_SOURCE.NANOGPT ? 'NanoGPT' : 'main LLM';
+        toastr.info(`Consolidating ${beforeCount} memories via ${sourceLabel}...`, 'CharMemory', { timeOut: 3000 });
 
         let result;
-        if (source === EXTRACTION_SOURCE.WEBLLM) {
+        if (source === EXTRACTION_SOURCE.NANOGPT) {
+            const customSysPrompt = extension_settings[MODULE_NAME].nanogptSystemPrompt;
+            const systemPrompt = customSysPrompt || 'You are a memory consolidation assistant.';
+            const messages = [
+                { role: 'system', content: systemPrompt },
+                { role: 'user', content: prompt },
+            ];
+            result = await generateNanoGptResponse(messages, extension_settings[MODULE_NAME].responseLength * 2);
+        } else if (source === EXTRACTION_SOURCE.WEBLLM) {
             if (!isWebLlmSupported()) {
                 toastr.error('WebLLM is not available in this browser.', 'CharMemory');
                 return;
@@ -1155,7 +1355,28 @@ function setupListeners() {
     });
 
     $('#charMemory_source').off('change').on('change', function () {
-        extension_settings[MODULE_NAME].source = String($(this).val());
+        const val = String($(this).val());
+        extension_settings[MODULE_NAME].source = val;
+        saveSettingsDebounced();
+        toggleNanoGptSettings(val);
+    });
+
+    $('#charMemory_nanogptApiKey').off('input').on('input', function () {
+        extension_settings[MODULE_NAME].nanogptApiKey = String($(this).val());
+        saveSettingsDebounced();
+    });
+
+    $('#charMemory_nanogptModel').off('change').on('change', async function () {
+        const val = String($(this).val());
+        extension_settings[MODULE_NAME].nanogptModel = val;
+        saveSettingsDebounced();
+        if (cachedNanoGptModels) {
+            updateNanoGptModelInfo(cachedNanoGptModels, val);
+        }
+    });
+
+    $('#charMemory_nanogptSystemPrompt').off('input').on('input', function () {
+        extension_settings[MODULE_NAME].nanogptSystemPrompt = String($(this).val());
         saveSettingsDebounced();
     });
 

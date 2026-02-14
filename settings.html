@@ -53,7 +53,27 @@
                         <select id="charMemory_source" class="text_pole">
                             <option value="main_llm">Main LLM</option>
                             <option value="webllm">WebLLM (browser-local)</option>
+                            <option value="nanogpt">NanoGPT (direct API)</option>
                         </select>
+
+                        <div id="charMemory_nanogptSettings" style="display:none;">
+                            <div class="charMemory_statusRow">
+                                <label><small>NanoGPT API Key</small></label>
+                                <input type="password" id="charMemory_nanogptApiKey" class="text_pole" placeholder="Enter API key" />
+                            </div>
+                            <div class="charMemory_statusRow">
+                                <label><small>Model</small></label>
+                                <select id="charMemory_nanogptModel" class="text_pole">
+                                    <option value="">-- Select model --</option>
+                                </select>
+                                <small id="charMemory_nanogptModelInfo" class="charMemory_helperText"></small>
+                            </div>
+                            <div class="charMemory_statusRow">
+                                <label><small>System prompt (optional)</small></label>
+                                <textarea id="charMemory_nanogptSystemPrompt" class="text_pole" rows="3" placeholder="Override the default system prompt. Leave blank for default."></textarea>
+                                <small class="charMemory_helperText">Prepended to extraction/consolidation calls. Use for jailbreaks or custom instructions.</small>
+                            </div>
+                        </div>
                     </div>
 
                     <div class="charMemory_sliderRow">

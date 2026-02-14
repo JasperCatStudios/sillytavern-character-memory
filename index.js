@@ -940,14 +940,11 @@ async function onChatChanged() {
         try {
             const content = await readMemories();
             const blocks = parseMemories(content);
-            const hasMemoriesForChat = blocks.some(b => b.chat === chatId);
-            const hasAnyMemories = blocks.length > 0;
-            // Reset if: no memories at all, or (per-chat mode and no memories for this chat)
-            const perChat = extension_settings[MODULE_NAME]?.perChat;
-            if (!hasAnyMemories || (perChat && !hasMemoriesForChat)) {
+            const hasMemoriesForChat = blocks.some(b => b.chat === chatId || b.chat === 'consolidated' || b.chat === 'unknown');
+            if (!hasMemoriesForChat) {
                 meta.lastExtractedIndex = -1;
                 saveMetadataDebounced();
-                logActivity(`Auto-reset lastExtractedIndex: was ${lastIdx} but no memories found — stale metadata`, 'warning');
+                logActivity(`Auto-reset lastExtractedIndex: was ${lastIdx} but no memories found for chat="${chatId}" — stale metadata`, 'warning');
             }
         } catch { /* ignore read errors */ }
     }

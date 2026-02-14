@@ -138,6 +138,22 @@
                 </div>
             </div>
 
+            <!-- Activity Log (default closed) -->
+            <div class="inline-drawer">
+                <div class="inline-drawer-toggle inline-drawer-header">
+                    <b>Activity Log</b>
+                    <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
+                </div>
+                <div class="inline-drawer-content">
+                    <div class="charMemory_buttonRow">
+                        <input type="button" id="charMemory_clearLog" class="menu_button" value="Clear" />
+                    </div>
+                    <div id="charMemory_activityLog" class="charMemory_activityLog" style="max-height:300px;overflow-y:auto;font-size:0.85em;font-family:monospace;">
+                        <div class="charMemory_diagEmpty">No activity yet.</div>
+                    </div>
+                </div>
+            </div>
+
             <!-- Diagnostics (default closed) -->
             <div class="inline-drawer">
                 <div class="inline-drawer-toggle inline-drawer-header">

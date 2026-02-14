@@ -134,6 +134,30 @@
     margin: 4px 0;
 }
 
+/* Activity Log */
+.charMemory_logEntry {
+    padding: 2px 4px;
+    border-bottom: 1px solid var(--SmartThemeBorderColor, rgba(128, 128, 128, 0.1));
+    line-height: 1.4;
+}
+
+.charMemory_logTime {
+    opacity: 0.5;
+    margin-right: 6px;
+}
+
+.charMemory_log_success {
+    color: var(--SmartThemeQuoteColor, #4a4);
+}
+
+.charMemory_log_warning {
+    color: orange;
+}
+
+.charMemory_log_error {
+    color: var(--SmartThemeQuoteColor, #c44);
+}
+
 /* Memory Manager Popup */
 .charMemory_manager {
     display: flex;

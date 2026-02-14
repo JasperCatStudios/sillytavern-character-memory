@@ -54,6 +54,35 @@ let inApiCall = false;
 let lastExtractionResult = null;
 let consolidationBackup = null;
 
+// ============ Activity Log ============
+
+const MAX_LOG_ENTRIES = 50;
+let activityLog = [];
+
+function logActivity(message, type = 'info') {
+    const now = new Date();
+    const timestamp = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
+    activityLog.unshift({ timestamp, message, type });
+    if (activityLog.length > MAX_LOG_ENTRIES) activityLog.pop();
+    updateActivityLogDisplay();
+}
+
+function updateActivityLogDisplay() {
+    const $container = $('#charMemory_activityLog');
+    if (!$container.length) return;
+
+    if (activityLog.length === 0) {
+        $container.html('<div class="charMemory_diagEmpty">No activity yet.</div>');
+        return;
+    }
+
+    const html = activityLog.map(entry => {
+        const typeClass = `charMemory_log_${entry.type}`;
+        return `<div class="charMemory_logEntry ${typeClass}"><span class="charMemory_logTime">${entry.timestamp}</span> ${escapeHtml(entry.message)}</div>`;
+    }).join('');
+    $container.html(html);
+}
+
 const defaultExtractionPrompt = `You are a memory extraction assistant. Read the recent chat messages and extract important character memories.
 
 Character name: {{charName}}
@@ -497,8 +526,11 @@ function collectRecentMessages(endIndex = null) {
     const maxMessages = extension_settings[MODULE_NAME].maxMessagesPerExtraction;
     const end = endIndex !== null ? endIndex + 1 : chat.length;
 
+    logActivity(`collectRecentMessages: lastExtractedIndex=${meta.lastExtractedIndex}, startIndex=${startIndex}, end=${end}, chatLength=${chat.length}`);
+
     // Get messages from startIndex to end, limited by maxMessages
-    const slice = chat.slice(Math.max(startIndex, end - maxMessages), end);
+    const sliceStart = Math.max(startIndex, end - maxMessages);
+    const slice = chat.slice(sliceStart, end);
 
     const lines = [];
     for (const msg of slice) {
@@ -506,6 +538,7 @@ function collectRecentMessages(endIndex = null) {
         lines.push(`${msg.name}: ${msg.mes}`);
     }
 
+    logActivity(`Collected ${lines.length} messages (indices ${sliceStart}-${end - 1})`);
     return lines.join('\n\n');
 }
 
@@ -652,8 +685,10 @@ async function testNanoGptConnection() {
             return;
         }
 
+        logActivity('NanoGPT connection test successful', 'success');
         toastr.success('Connection successful!', 'CharMemory');
     } catch (err) {
+        logActivity(`NanoGPT connection test failed: ${err.message}`, 'error');
         toastr.error(err.message || 'Connection failed', 'CharMemory');
     } finally {
         $btn.prop('disabled', false);
@@ -741,9 +776,12 @@ async function extractMemories(force = false, endIndex = null) {
         return;
     }
 
+    logActivity(`Extraction triggered (${force ? 'manual' : 'auto'}), endIndex=${endIndex ?? 'last'}`);
+
     const recentMessages = collectRecentMessages(endIndex);
     if (!recentMessages) {
         console.log(LOG_PREFIX, 'No new messages to extract');
+        logActivity('No new messages to extract — collectRecentMessages returned empty', 'warning');
         toastr.info('No new messages to extract.', 'CharMemory');
         return;
     }
@@ -803,6 +841,7 @@ async function extractMemories(force = false, endIndex = null) {
 
         if (!cleanResult || cleanResult === 'NO_NEW_MEMORIES') {
             console.log(LOG_PREFIX, 'No new memories extracted');
+            logActivity('LLM returned NO_NEW_MEMORIES — lastExtractedIndex not advanced', 'warning');
             toastr.info('No new memories found.', 'CharMemory');
         } else {
             // Parse existing memory blocks
@@ -833,18 +872,24 @@ async function extractMemories(force = false, endIndex = null) {
 
             await writeMemories(serializeMemories(existing));
             console.log(LOG_PREFIX, 'Memories updated successfully');
+            logActivity(`Saved ${newBulletCount} new memor${newBulletCount === 1 ? 'y' : 'ies'}`, 'success');
             toastr.success(`${newBulletCount} new memor${newBulletCount === 1 ? 'y' : 'ies'} extracted and saved!`, 'CharMemory');
+
+            // Only advance lastExtractedIndex when memories were actually found
+            ensureMetadata();
+            chat_metadata[MODULE_NAME].lastExtractedIndex = endIndex !== null ? endIndex : context.chat.length - 1;
+            logActivity(`Advanced lastExtractedIndex to ${chat_metadata[MODULE_NAME].lastExtractedIndex}`);
         }
 
-        // Update metadata
+        // Always reset message counter to prevent re-trigger loops
         ensureMetadata();
-        chat_metadata[MODULE_NAME].lastExtractedIndex = endIndex !== null ? endIndex : context.chat.length - 1;
         chat_metadata[MODULE_NAME].messagesSinceExtraction = 0;
         saveMetadataDebounced();
         updateStatusDisplay();
         updateAllIndicators();
     } catch (err) {
         console.error(LOG_PREFIX, 'Extraction failed:', err);
+        logActivity(`Extraction failed: ${err.message}`, 'error');
         toastr.error('Memory extraction failed. Check console for details.', 'CharMemory');
     } finally {
         inApiCall = false;
@@ -877,16 +922,26 @@ function onCharacterMessageRendered() {
  * Event handler for CHAT_CHANGED — reset status display.
  */
 function onChatChanged() {
+    const context = getContext();
+    const chatId = context.chatId || '(none)';
+    const charName = getCharacterName() || '(none)';
+    const msgCount = context.chat ? context.chat.length : 0;
+
+    logActivity(`Chat changed: "${charName}" chat=${chatId} (${msgCount} messages)`);
+
     // Seed messagesSinceExtraction with unextracted message count so
     // automatic extraction triggers correctly after switching chats.
     ensureMetadata();
-    const context = getContext();
     const meta = chat_metadata[MODULE_NAME];
     const lastIdx = meta.lastExtractedIndex ?? -1;
-    const unextracted = context.chat ? context.chat.length - 1 - lastIdx : 0;
+    const unextracted = msgCount > 0 ? msgCount - 1 - lastIdx : 0;
+
+    logActivity(`Extraction state: lastExtractedIndex=${lastIdx}, messagesSinceExtraction=${meta.messagesSinceExtraction}, unextracted=${unextracted}`);
+
     if (unextracted > 0 && meta.messagesSinceExtraction < unextracted) {
         meta.messagesSinceExtraction = unextracted;
         saveMetadataDebounced();
+        logActivity(`Seeded messagesSinceExtraction=${unextracted}`);
     }
 
     updateStatusDisplay();
@@ -1565,6 +1620,11 @@ function setupListeners() {
     $('#charMemory_refreshDiag').off('click').on('click', function () {
         captureDiagnostics();
         toastr.info('Diagnostics refreshed.', 'CharMemory');
+    });
+
+    $('#charMemory_clearLog').off('click').on('click', function () {
+        activityLog = [];
+        updateActivityLogDisplay();
     });
 }
 

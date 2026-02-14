@@ -8,7 +8,9 @@ import {
     characters,
     this_chid,
     substituteParamsExtended,
+    getRequestHeaders,
 } from '../../../../script.js';
+import { getStringHash } from '../../../utils.js';
 import {
     getContext,
     extension_settings,
@@ -102,64 +104,118 @@ const defaultSettings = {
 // ============ Structured Memory Helpers ============
 
 /**
- * Parse structured memory markdown into an array of memory objects.
- * @param {string} content Raw markdown content.
- * @returns {{number: number, timestamp: string, text: string}[]}
+ * Parse <memory> tag blocks into an array of memory objects.
+ * @param {string} content Raw file content.
+ * @returns {{chat: string, date: string, bullets: string[]}[]}
  */
 function parseMemories(content) {
     if (!content || !content.trim()) return [];
 
-    // Split on ## Memory N headers
-    const parts = content.split(/^## Memory \d+\s*$/m);
-    const memories = [];
+    const blocks = [];
+    const regex = /<memory\b([^>]*)>([\s\S]*?)<\/memory>/gi;
+    let match;
 
-    for (let i = 1; i < parts.length; i++) {
-        const part = parts[i].trim();
-        if (!part) continue;
+    while ((match = regex.exec(content)) !== null) {
+        const attrs = match[1];
+        const body = match[2];
 
-        let timestamp = '';
-        let text = part;
+        // Extract chat and date attributes
+        const chatMatch = attrs.match(/chat="([^"]*)"/);
+        const dateMatch = attrs.match(/date="([^"]*)"/);
+        const chat = chatMatch ? chatMatch[1] : 'unknown';
+        const date = dateMatch ? dateMatch[1] : '';
 
-        // Extract timestamp line: _Extracted: ..._
-        const tsMatch = part.match(/^_Extracted:\s*(.+?)_\s*\n/);
-        if (tsMatch) {
-            timestamp = tsMatch[1].trim();
-            text = part.slice(tsMatch[0].length).trim();
+        // Extract bullets (lines starting with "- ")
+        const bullets = body.split('\n')
+            .map(line => line.trim())
+            .filter(line => line.startsWith('- '))
+            .map(line => line.slice(2).trim())
+            .filter(Boolean);
+
+        if (bullets.length > 0) {
+            blocks.push({ chat, date, bullets });
         }
-
-        memories.push({ number: memories.length + 1, timestamp, text });
     }
 
-    return memories;
+    return blocks;
 }
 
 /**
- * Serialize an array of memory objects back to structured markdown.
- * @param {{number?: number, timestamp: string, text: string}[]} memories
+ * Count total individual memories (bullets) across all blocks.
+ * @param {{bullets: string[]}[]} blocks Parsed memory blocks.
+ * @returns {number}
+ */
+function countMemories(blocks) {
+    return blocks.reduce((sum, b) => sum + b.bullets.length, 0);
+}
+
+/**
+ * Serialize an array of memory blocks back to <memory> tag format.
+ * @param {{chat: string, date: string, bullets: string[]}[]} blocks
  * @returns {string}
  */
-function serializeMemories(memories) {
-    return memories.map((m, i) => {
-        const num = i + 1;
-        return `## Memory ${num}\n_Extracted: ${m.timestamp}_\n\n${m.text}`;
+function serializeMemories(blocks) {
+    return blocks.map(b => {
+        const bulletsText = b.bullets.map(bullet => `- ${bullet}`).join('\n');
+        return `<memory chat="${b.chat}" date="${b.date}">\n${bulletsText}\n</memory>`;
     }).join('\n\n');
 }
 
 /**
- * Migrate flat-text memories to structured format if needed.
+ * Migrate old memory formats to <memory> tag format if needed.
  * @param {string} content Existing file content.
- * @returns {string} Structured content.
+ * @returns {string} Content in <memory> tag format.
  */
 function migrateMemoriesIfNeeded(content) {
     if (!content || !content.trim()) return content;
 
-    // Already structured?
-    if (/^## Memory \d+/m.test(content)) return content;
+    // Already in <memory> tag format?
+    if (/<memory\b[^>]*>/i.test(content)) return content;
 
-    // Wrap entire content as Memory 1
     const now = new Date();
     const timestamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-    return `## Memory 1\n_Extracted: ${timestamp}_\n\n${content.trim()}`;
+
+    // Old ## Memory N format?
+    if (/^## Memory \d+/m.test(content)) {
+        const parts = content.split(/^## Memory \d+\s*$/m);
+        const blocks = [];
+
+        for (let i = 1; i < parts.length; i++) {
+            const part = parts[i].trim();
+            if (!part) continue;
+
+            let date = timestamp;
+            let text = part;
+
+            // Extract old timestamp: _Extracted: ..._
+            const tsMatch = part.match(/^_Extracted:\s*(.+?)_\s*\n/);
+            if (tsMatch) {
+                date = tsMatch[1].trim();
+                text = part.slice(tsMatch[0].length).trim();
+            }
+
+            // Extract bullets or wrap plain text as a single bullet
+            const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+            const bullets = lines.filter(l => l.startsWith('- ')).map(l => l.slice(2).trim());
+            if (bullets.length === 0 && text.trim()) {
+                bullets.push(text.trim());
+            }
+
+            if (bullets.length > 0) {
+                blocks.push({ chat: 'unknown', date, bullets });
+            }
+        }
+
+        return serializeMemories(blocks);
+    }
+
+    // Completely flat text — wrap as a single block
+    const lines = content.trim().split('\n').map(l => l.trim()).filter(Boolean);
+    const bullets = lines.filter(l => l.startsWith('- ')).map(l => l.slice(2).trim());
+    if (bullets.length === 0) {
+        bullets.push(content.trim());
+    }
+    return serializeMemories([{ chat: 'unknown', date: timestamp, bullets }]);
 }
 
 // Diagnostics state (session-only, not persisted)
@@ -221,12 +277,6 @@ function ensureMetadata() {
 
 function updateStatusDisplay() {
     ensureMetadata();
-    const meta = chat_metadata[MODULE_NAME];
-    const interval = extension_settings[MODULE_NAME]?.interval ?? 10;
-    const since = meta?.messagesSinceExtraction ?? 0;
-
-    // Stats bar: progress
-    $('#charMemory_statProgress').text(`${since} / ${interval}`);
 
     // Stats bar: file name
     const charName = getCharacterName();
@@ -237,11 +287,12 @@ function updateStatusDisplay() {
         $('#charMemory_statFile').text('No character').attr('title', 'No character selected');
     }
 
-    // Stats bar: memory count (async)
+    // Stats bar: memory count (total bullets, async)
     const attachment = findMemoryAttachment();
     if (attachment) {
         getFileAttachment(attachment.url).then(content => {
-            const count = parseMemories(content || '').length;
+            const blocks = parseMemories(content || '');
+            const count = countMemories(blocks);
             $('#charMemory_statCount').text(`${count} memor${count === 1 ? 'y' : 'ies'}`);
         }).catch(() => {
             $('#charMemory_statCount').text('? memories');
@@ -473,28 +524,35 @@ async function extractMemories(force = false) {
             console.log(LOG_PREFIX, 'No new memories extracted');
             toastr.info('No new memories found.', 'CharMemory');
         } else {
-            // Parse existing memories
+            // Parse existing memory blocks
             const existing = parseMemories(existingMemories);
             const now = new Date();
             const timestamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+            const chatId = context.chatId || 'unknown';
 
-            // Parse <memory> blocks; fallback: treat entire result as one entry
-            let newEntries;
+            // Parse <memory> blocks from LLM response; fallback: treat entire result as one block
             const memoryRegex = /<memory>([\s\S]*?)<\/memory>/gi;
             const matches = [...cleanResult.matchAll(memoryRegex)];
-            if (matches.length > 0) {
-                newEntries = matches.map(m => m[1].trim()).filter(Boolean);
-            } else {
-                newEntries = [cleanResult.trim()].filter(Boolean);
-            }
+            const rawEntries = matches.length > 0
+                ? matches.map(m => m[1].trim()).filter(Boolean)
+                : [cleanResult.trim()].filter(Boolean);
 
-            for (const entry of newEntries) {
-                existing.push({ number: existing.length + 1, timestamp, text: entry });
+            let newBulletCount = 0;
+            for (const entry of rawEntries) {
+                const bullets = entry.split('\n')
+                    .map(l => l.trim())
+                    .filter(l => l.startsWith('- '))
+                    .map(l => l.slice(2).trim())
+                    .filter(Boolean);
+                // If no bullets found, treat the whole entry as a single bullet
+                const finalBullets = bullets.length > 0 ? bullets : [entry];
+                existing.push({ chat: chatId, date: timestamp, bullets: finalBullets });
+                newBulletCount += finalBullets.length;
             }
 
             await writeMemories(serializeMemories(existing));
             console.log(LOG_PREFIX, 'Memories updated successfully');
-            toastr.success(`${newEntries.length} new memor${newEntries.length === 1 ? 'y' : 'ies'} extracted and saved!`, 'CharMemory');
+            toastr.success(`${newBulletCount} new memor${newBulletCount === 1 ? 'y' : 'ies'} extracted and saved!`, 'CharMemory');
         }
 
         // Update metadata
@@ -582,6 +640,27 @@ function captureDiagnostics() {
     updateDiagnosticsDisplay();
 }
 
+/**
+ * Check vectorization status for a file URL.
+ * @param {string} fileUrl The attachment URL.
+ * @returns {Promise<number|false|null>} Number of chunks if vectorized, false if not, null if vectors unavailable.
+ */
+async function checkVectorizationStatus(fileUrl) {
+    try {
+        const collectionId = `file_${getStringHash(fileUrl)}`;
+        const response = await fetch('/api/vector/list', {
+            method: 'POST',
+            headers: getRequestHeaders(),
+            body: JSON.stringify({ collectionId }),
+        });
+        if (!response.ok) return null;
+        const hashes = await response.json();
+        return hashes.length > 0 ? hashes.length : false;
+    } catch {
+        return null;
+    }
+}
+
 function updateDiagnosticsDisplay() {
     const container = $('#charMemory_diagnosticsContent');
     if (!container.length) return;
@@ -607,18 +686,35 @@ function updateDiagnosticsDisplay() {
     </div>`;
 
     if (memAttachment) {
-        // Read content synchronously from cache is not possible, so show count from last known state
-        // We do an async read and update when available
+        // Async read and update when available
         getFileAttachment(memAttachment.url).then(content => {
-            const memories = parseMemories(content || '');
+            const blocks = parseMemories(content || '');
+            const count = countMemories(blocks);
             const countEl = document.getElementById('charMemory_diagMemoryCount');
-            if (countEl) countEl.textContent = String(memories.length);
+            if (countEl) countEl.textContent = `${count} (in ${blocks.length} block${blocks.length === 1 ? '' : 's'})`;
+        }).catch(() => {});
+
+        // Vectorization status (async)
+        checkVectorizationStatus(memAttachment.url).then(result => {
+            const vecEl = document.getElementById('charMemory_diagVectorization');
+            if (!vecEl) return;
+            if (result === null) {
+                vecEl.textContent = 'N/A (vectors not enabled)';
+            } else if (result === false) {
+                vecEl.textContent = 'No';
+            } else {
+                vecEl.textContent = `Yes (${result} chunk${result === 1 ? '' : 's'})`;
+            }
         }).catch(() => {});
     }
     const countDisplay = memAttachment ? '...' : '0';
     html += `<div class="charMemory_diagCard">
         <div class="charMemory_diagCardTitle">Memory count</div>
         <div class="charMemory_diagCardContent" id="charMemory_diagMemoryCount">${countDisplay}</div>
+    </div>`;
+    html += `<div class="charMemory_diagCard">
+        <div class="charMemory_diagCardTitle">Vectorization</div>
+        <div class="charMemory_diagCardContent" id="charMemory_diagVectorization">${memAttachment ? '...' : 'N/A'}</div>
     </div>`;
 
     if (lastExtractionResult) {
@@ -679,27 +775,33 @@ function escapeHtml(text) {
 
 async function showMemoryManager() {
     const content = await readMemories();
-    const memories = parseMemories(content);
+    const blocks = parseMemories(content);
 
-    if (memories.length === 0) {
+    if (blocks.length === 0) {
         callGenericPopup('No memories yet.', POPUP_TYPE.TEXT);
         return;
     }
 
     let html = '<div class="charMemory_manager">';
-    for (let i = 0; i < memories.length; i++) {
-        const m = memories[i];
-        html += `<div class="charMemory_card" data-index="${i}">
+    for (let bi = 0; bi < blocks.length; bi++) {
+        const b = blocks[bi];
+        const chatLabel = b.chat.length > 16 ? b.chat.slice(0, 16) + '...' : b.chat;
+        html += `<div class="charMemory_card" data-block="${bi}">
             <div class="charMemory_cardHeader">
-                <span class="charMemory_cardTitle">Memory ${i + 1}</span>
-                <span class="charMemory_cardTimestamp">${escapeHtml(m.timestamp)}</span>
-                <span class="charMemory_cardActions">
-                    <button class="charMemory_editBtn menu_button menu_button_icon" data-index="${i}" title="Edit"><i class="fa-solid fa-pencil"></i></button>
-                    <button class="charMemory_deleteBtn menu_button menu_button_icon" data-index="${i}" title="Delete"><i class="fa-solid fa-trash"></i></button>
-                </span>
+                <span class="charMemory_cardTitle">${escapeHtml(chatLabel)}</span>
+                <span class="charMemory_cardTimestamp">${escapeHtml(b.date)}</span>
             </div>
-            <div class="charMemory_cardBody">${escapeHtml(m.text)}</div>
-        </div>`;
+            <div class="charMemory_cardBullets">`;
+        for (let bui = 0; bui < b.bullets.length; bui++) {
+            html += `<div class="charMemory_bulletRow">
+                <span class="charMemory_bulletText">- ${escapeHtml(b.bullets[bui])}</span>
+                <span class="charMemory_bulletActions">
+                    <button class="charMemory_editBtn menu_button menu_button_icon" data-block="${bi}" data-bullet="${bui}" title="Edit"><i class="fa-solid fa-pencil"></i></button>
+                    <button class="charMemory_deleteBtn menu_button menu_button_icon" data-block="${bi}" data-bullet="${bui}" title="Delete"><i class="fa-solid fa-trash"></i></button>
+                </span>
+            </div>`;
+        }
+        html += '</div></div>';
     }
     html += '</div>';
 
@@ -708,14 +810,16 @@ async function showMemoryManager() {
     // Wire up event handlers using delegation
     $(document).off('click.charMemoryManager').on('click.charMemoryManager', '.charMemory_editBtn', async function (e) {
         e.stopPropagation();
-        const idx = Number($(this).data('index'));
-        await editMemory(idx);
+        const blockIdx = Number($(this).data('block'));
+        const bulletIdx = Number($(this).data('bullet'));
+        await editMemory(blockIdx, bulletIdx);
     });
 
     $(document).off('click.charMemoryDelete').on('click.charMemoryDelete', '.charMemory_deleteBtn', async function (e) {
         e.stopPropagation();
-        const idx = Number($(this).data('index'));
-        await deleteMemory(idx);
+        const blockIdx = Number($(this).data('block'));
+        const bulletIdx = Number($(this).data('bullet'));
+        await deleteMemory(blockIdx, bulletIdx);
     });
 
     // Clean up when popup closes
@@ -725,33 +829,43 @@ async function showMemoryManager() {
     });
 }
 
-async function editMemory(index) {
+async function editMemory(blockIndex, bulletIndex) {
     const content = await readMemories();
-    const memories = parseMemories(content);
+    const blocks = parseMemories(content);
 
-    if (index < 0 || index >= memories.length) return;
+    if (blockIndex < 0 || blockIndex >= blocks.length) return;
+    const block = blocks[blockIndex];
+    if (bulletIndex < 0 || bulletIndex >= block.bullets.length) return;
 
-    const edited = await callGenericPopup('Edit memory:', POPUP_TYPE.INPUT, memories[index].text, { rows: 6 });
+    const edited = await callGenericPopup('Edit memory:', POPUP_TYPE.INPUT, block.bullets[bulletIndex], { rows: 3 });
 
     if (edited === null || edited === false) return; // cancelled
 
-    memories[index].text = String(edited).trim();
-    await writeMemories(serializeMemories(memories));
+    block.bullets[bulletIndex] = String(edited).trim();
+    await writeMemories(serializeMemories(blocks));
     toastr.success('Memory updated.', 'CharMemory');
     showMemoryManager(); // refresh
 }
 
-async function deleteMemory(index) {
+async function deleteMemory(blockIndex, bulletIndex) {
     const content = await readMemories();
-    const memories = parseMemories(content);
+    const blocks = parseMemories(content);
 
-    if (index < 0 || index >= memories.length) return;
+    if (blockIndex < 0 || blockIndex >= blocks.length) return;
+    const block = blocks[blockIndex];
+    if (bulletIndex < 0 || bulletIndex >= block.bullets.length) return;
 
-    const confirm = await callGenericPopup(`Delete Memory ${index + 1}?`, POPUP_TYPE.CONFIRM);
+    const confirm = await callGenericPopup(`Delete this memory?\n\n- ${block.bullets[bulletIndex]}`, POPUP_TYPE.CONFIRM);
     if (!confirm) return;
 
-    memories.splice(index, 1);
-    await writeMemories(serializeMemories(memories));
+    block.bullets.splice(bulletIndex, 1);
+
+    // Remove block entirely if no bullets remain
+    if (block.bullets.length === 0) {
+        blocks.splice(blockIndex, 1);
+    }
+
+    await writeMemories(serializeMemories(blocks));
     toastr.success('Memory deleted.', 'CharMemory');
     showMemoryManager(); // refresh
 }
@@ -788,8 +902,10 @@ async function consolidateMemories() {
         return;
     }
 
-    const beforeCount = memories.length;
-    let memoriesText = memories.map((m, i) => `[Memory ${i + 1}]\n${m.text}`).join('\n\n');
+    const beforeCount = countMemories(memories);
+    let memoriesText = memories.map((b, i) =>
+        `[Block ${i + 1}]\n${b.bullets.map(bullet => `- ${bullet}`).join('\n')}`,
+    ).join('\n\n');
 
     // Truncate for WebLLM's smaller context window
     const isWebLlm = extension_settings[MODULE_NAME].source === EXTRACTION_SOURCE.WEBLLM;
@@ -839,23 +955,23 @@ async function consolidateMemories() {
         const now = new Date();
         const timestamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 
-        let newEntries;
         const consolidationRegex = /<memory>([\s\S]*?)<\/memory>/gi;
         const consolidationMatches = [...cleanResult.matchAll(consolidationRegex)];
-        if (consolidationMatches.length > 0) {
-            newEntries = consolidationMatches.map(m => m[1].trim()).filter(Boolean);
-        } else {
-            newEntries = [cleanResult.trim()].filter(Boolean);
-        }
+        const rawEntries = consolidationMatches.length > 0
+            ? consolidationMatches.map(m => m[1].trim()).filter(Boolean)
+            : [cleanResult.trim()].filter(Boolean);
 
-        const consolidated = newEntries.map((text, i) => ({
-            number: i + 1,
-            timestamp,
-            text,
-        }));
+        const consolidated = rawEntries.map(entry => {
+            const bullets = entry.split('\n')
+                .map(l => l.trim())
+                .filter(l => l.startsWith('- '))
+                .map(l => l.slice(2).trim())
+                .filter(Boolean);
+            return { chat: 'consolidated', date: timestamp, bullets: bullets.length > 0 ? bullets : [entry] };
+        });
 
         await writeMemories(serializeMemories(consolidated));
-        const afterCount = consolidated.length;
+        const afterCount = countMemories(consolidated);
         toastr.success(`Consolidated ${beforeCount} → ${afterCount} memories.`, 'CharMemory');
         console.log(LOG_PREFIX, `Consolidation: ${beforeCount} → ${afterCount}`);
         updateStatusDisplay();

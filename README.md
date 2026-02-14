@@ -47,6 +47,7 @@ Restart SillyTavern after installation.
 5. Use **View / Edit** to browse and manage individual memories
 6. Use **Consolidate** to merge duplicates when the file grows large — a Before/After preview is shown before changes are applied
 7. Use **Undo Consolidation** to restore the previous memories if the consolidation result isn't satisfactory
+8. Use **Reset Extraction State** (in Settings) after editing or deleting memories so the next extraction re-reads all messages
 
 ### Stats Bar
 

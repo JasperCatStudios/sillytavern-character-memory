@@ -101,6 +101,8 @@
                     <hr class="charMemory_separator" />
 
                     <div class="charMemory_statusRow">
+                        <input type="button" id="charMemory_resetTracking" class="menu_button" value="Reset Extraction State" title="Reset extraction tracking so the next extraction re-reads all messages" />
+                        <small class="charMemory_helperText">Resets extraction tracking without deleting memories. Use after editing or deleting memories so the LLM can re-extract from earlier messages.</small>
                         <input type="button" id="charMemory_resetExtraction" class="menu_button charMemory_dangerBtn" value="Clear All Memories" title="Delete all memories and reset extraction state" />
                         <small class="charMemory_helperText">Deletes the memory file and resets extraction tracking. This cannot be undone.</small>
                     </div>

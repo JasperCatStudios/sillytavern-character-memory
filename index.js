@@ -1175,6 +1175,15 @@ function setupListeners() {
         extractMemories(true);
     });
 
+    $('#charMemory_resetTracking').off('click').on('click', function () {
+        ensureMetadata();
+        chat_metadata[MODULE_NAME].lastExtractedIndex = -1;
+        chat_metadata[MODULE_NAME].messagesSinceExtraction = 0;
+        saveMetadataDebounced();
+        updateStatusDisplay();
+        toastr.success('Extraction state reset. Next extraction will re-read all messages.', 'CharMemory');
+    });
+
     $('#charMemory_resetExtraction').off('click').on('click', async function () {
         ensureMetadata();
         chat_metadata[MODULE_NAME].lastExtractedIndex = -1;

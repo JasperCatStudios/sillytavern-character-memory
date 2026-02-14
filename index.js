@@ -921,7 +921,7 @@ function onCharacterMessageRendered() {
 /**
  * Event handler for CHAT_CHANGED — reset status display.
  */
-function onChatChanged() {
+async function onChatChanged() {
     const context = getContext();
     const chatId = context.chatId || '(none)';
     const charName = getCharacterName() || '(none)';
@@ -929,15 +929,36 @@ function onChatChanged() {
 
     logActivity(`Chat changed: "${charName}" chat=${chatId} (${msgCount} messages)`);
 
-    // Seed messagesSinceExtraction with unextracted message count so
-    // automatic extraction triggers correctly after switching chats.
     ensureMetadata();
     const meta = chat_metadata[MODULE_NAME];
     const lastIdx = meta.lastExtractedIndex ?? -1;
-    const unextracted = msgCount > 0 ? msgCount - 1 - lastIdx : 0;
 
-    logActivity(`Extraction state: lastExtractedIndex=${lastIdx}, messagesSinceExtraction=${meta.messagesSinceExtraction}, unextracted=${unextracted}`);
+    // Detect stale metadata: lastExtractedIndex is set but no memories exist
+    // for this chat. This happens when old code advanced the index even on
+    // NO_NEW_MEMORIES. Auto-reset so extraction can run.
+    if (lastIdx >= 0) {
+        try {
+            const content = await readMemories();
+            const blocks = parseMemories(content);
+            const hasMemoriesForChat = blocks.some(b => b.chat === chatId);
+            const hasAnyMemories = blocks.length > 0;
+            // Reset if: no memories at all, or (per-chat mode and no memories for this chat)
+            const perChat = extension_settings[MODULE_NAME]?.perChat;
+            if (!hasAnyMemories || (perChat && !hasMemoriesForChat)) {
+                meta.lastExtractedIndex = -1;
+                saveMetadataDebounced();
+                logActivity(`Auto-reset lastExtractedIndex: was ${lastIdx} but no memories found — stale metadata`, 'warning');
+            }
+        } catch { /* ignore read errors */ }
+    }
 
+    const effectiveLastIdx = meta.lastExtractedIndex ?? -1;
+    const unextracted = msgCount > 0 ? msgCount - 1 - effectiveLastIdx : 0;
+
+    logActivity(`Extraction state: lastExtractedIndex=${effectiveLastIdx}, messagesSinceExtraction=${meta.messagesSinceExtraction}, unextracted=${unextracted}`);
+
+    // Seed messagesSinceExtraction with unextracted message count so
+    // automatic extraction triggers correctly after switching chats.
     if (unextracted > 0 && meta.messagesSinceExtraction < unextracted) {
         meta.messagesSinceExtraction = unextracted;
         saveMetadataDebounced();

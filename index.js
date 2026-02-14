@@ -622,6 +622,72 @@ function collectRecentMessages({ endIndex = null, chatArray = null, lastExtracte
     return { text: lines.join('\n\n'), startIndex, endIndex: sliceEnd - 1 };
 }
 
+// ============ Server API Helpers ============
+
+/**
+ * Fetch all chats for the current character from the server.
+ * @returns {Promise<Array>} Array of chat objects with file_name, chat_items, last_mes, etc.
+ */
+async function fetchCharacterChats() {
+    const context = getContext();
+    if (context.characterId === undefined) return [];
+
+    const avatar = characters[this_chid]?.avatar;
+    if (!avatar) return [];
+
+    const response = await fetch('/api/characters/chats', {
+        method: 'POST',
+        headers: getRequestHeaders(),
+        body: JSON.stringify({ avatar_url: avatar, simple: false }),
+    });
+
+    if (!response.ok) {
+        console.error(LOG_PREFIX, 'Failed to fetch character chats:', response.status);
+        return [];
+    }
+
+    const chats = await response.json();
+    // API returns array of single-key objects like [{filename: {data}}] — flatten
+    return chats.map(c => {
+        const key = Object.keys(c)[0];
+        return { file_name: key, ...c[key] };
+    });
+}
+
+/**
+ * Fetch full message history for a specific chat file from the server.
+ * @param {string} fileName - Chat filename (with or without .jsonl extension)
+ * @returns {Promise<{metadata: object, messages: object[]}|null>}
+ */
+async function fetchChatMessages(fileName) {
+    const avatar = characters[this_chid]?.avatar;
+    const charName = getCharacterName();
+    if (!avatar || !charName) return null;
+
+    const response = await fetch('/api/chats/get', {
+        method: 'POST',
+        headers: getRequestHeaders(),
+        body: JSON.stringify({
+            avatar_url: avatar,
+            file_name: fileName.replace('.jsonl', ''),
+            ch_name: charName,
+        }),
+    });
+
+    if (!response.ok) {
+        console.error(LOG_PREFIX, 'Failed to fetch chat:', fileName, response.status);
+        return null;
+    }
+
+    const data = await response.json();
+    if (!Array.isArray(data) || data.length === 0) return null;
+
+    return {
+        metadata: data[0]?.chat_metadata || {},
+        messages: data.slice(1),
+    };
+}
+
 // ============ NanoGPT API Helpers ============
 
 let cachedNanoGptModels = null;

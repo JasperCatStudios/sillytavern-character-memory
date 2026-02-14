@@ -88,11 +88,15 @@ const defaultExtractionPrompt = `You are a memory extraction assistant. Read the
 
 Character name: {{charName}}
 
-EXISTING MEMORIES (do NOT repeat these):
+===== EXISTING MEMORIES (reference only — do NOT repeat, rephrase, or remix these) =====
 {{existingMemories}}
+===== END EXISTING MEMORIES =====
 
-RECENT CHAT MESSAGES:
+===== RECENT CHAT MESSAGES (extract ONLY from this section) =====
 {{recentMessages}}
+===== END RECENT CHAT MESSAGES =====
+
+CRITICAL: Only extract memories from the RECENT CHAT MESSAGES section above. The EXISTING MEMORIES section is provided solely so you know what has already been recorded. Do not restate, paraphrase, or recombine anything from existing memories.
 
 INSTRUCTIONS:
 1. Extract only NEW facts, events, relationships, emotional developments, or significant details NOT already in existing memories. Focus on what {{char}} would remember or reference later.
@@ -111,14 +115,17 @@ FOCUS ON these categories:
 - Personal history, goals, fears, motivations
 - Emotional developments and turning points
 - Skills, possessions, or status changes
+- Significant encounters or experiences (who, what happened, what was notable — not a step-by-step account)
 
 AVOID extracting:
-- Sexual mechanics or play-by-play physical descriptions
+- Repetitive play-by-play minutiae (individual movements, position changes, moment-to-moment physical mechanics)
 - Temporary states ("is currently cold", "is sitting down")
 - Paraphrased dialogue or conversation filler
 - Scene-setting or atmosphere descriptions
 - Moment-to-moment location tracking
 - Actions with no lasting significance
+
+NOTE: When an encounter or event is significant, capture the key details that made it memorable — vivid sensory moments, emotional reactions, power dynamics, things that surprised or affected {{char}}. Skip the sequential play-by-play connecting them. Two similar events with different people or contexts are distinct memories.
 
 Each memory block should answer: "What would {{char}} remember or reference about this?"
 
@@ -843,7 +850,11 @@ async function extractMemories(force = false, endIndex = null) {
     if (!recentMessages) {
         console.log(LOG_PREFIX, 'No new messages to extract');
         logActivity('No new messages to extract — collectRecentMessages returned empty', 'warning');
-        toastr.info('No new messages to extract.', 'CharMemory');
+        if (force) {
+            toastr.info('No unprocessed messages. Use "Reset Extraction State" to re-read from the beginning.', 'CharMemory', { timeOut: 5000 });
+        } else {
+            toastr.info('No new messages to extract.', 'CharMemory');
+        }
         return;
     }
 
@@ -1033,6 +1044,10 @@ async function onChatChanged() {
 
     updateStatusDisplay();
     updateAllIndicators();
+
+    // Inject buttons on already-rendered messages (with a small delay to
+    // ensure the DOM has finished rendering the chat)
+    setTimeout(addButtonsToExistingMessages, 500);
 }
 
 // ============ Diagnostics ============
@@ -1578,6 +1593,7 @@ function setupListeners() {
         const val = Number($(this).val());
         extension_settings[MODULE_NAME].interval = val;
         $('#charMemory_intervalValue').text(val);
+
         saveSettingsDebounced();
     });
 
@@ -1769,6 +1785,38 @@ function updateAllIndicators() {
         if (!msg || msg.is_user || msg.is_system) return;
 
         updateIndicatorForMessage(this, mesId);
+    });
+}
+
+/**
+ * Inject per-message buttons on all already-rendered messages.
+ * Called on chat load/switch since MESSAGE_RENDERED events only fire for new messages.
+ */
+function addButtonsToExistingMessages() {
+    const context = getContext();
+    if (context.characterId === undefined) return;
+
+    $('#chat .mes').each(function () {
+        const mesId = Number($(this).attr('mesid'));
+        if (isNaN(mesId)) return;
+
+        const msg = context.chat[mesId];
+        if (!msg || msg.is_system) return;
+
+        const $extraBtns = $(this).find('.extraMesButtons');
+        if (!$extraBtns.length) return;
+
+        // Skip if already injected
+        if ($extraBtns.find('.charMemory_extractHereBtn, .charMemory_pinMemoryBtn').length) return;
+
+        // Pin as memory — all non-system messages
+        $extraBtns.prepend(`<div class="mes_button charMemory_pinMemoryBtn" data-mesid="${mesId}" title="Pin as memory"><i class="fa-solid fa-bookmark"></i></div>`);
+
+        // Extract from here — character messages only
+        if (!msg.is_user) {
+            $extraBtns.prepend(`<div class="mes_button charMemory_extractHereBtn" data-mesid="${mesId}" title="Extract memories up to here"><i class="fa-solid fa-brain"></i></div>`);
+            updateIndicatorForMessage(this, mesId);
+        }
     });
 }
 

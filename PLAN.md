@@ -6,21 +6,25 @@ Core functionality implemented:
 - [x] Auto-extraction every N character messages
 - [x] Data Bank file CRUD with `<memory>` tag format
 - [x] Per-character auto-naming and optional per-chat memory files
-- [x] Settings panel with 3 collapsible sections (main, Settings, Diagnostics)
-- [x] Stats bar: file name + total bullet count
+- [x] Settings panel with collapsible sections (main, Settings, Activity & Diagnostics)
+- [x] Stats bar: file name, memory count, extraction progress, cooldown timer
 - [x] Memory Manager with grouped cards and per-bullet edit/delete
 - [x] Memory consolidation (merge duplicates via LLM) with preview and undo
 - [x] Clear All Memories with extraction state reset
 - [x] Customizable extraction prompt with Restore Default
 - [x] Extraction via Main LLM, WebLLM (browser-local), or NanoGPT (direct API)
 - [x] NanoGPT: API key test button, model filters (subscription, open source, roleplay, reasoning)
-- [x] Activity Log panel with timestamped events for debugging
-- [x] Diagnostics panel (memory info, vectorization status, lorebook entries, extension prompts)
+- [x] Activity Log + Diagnostics in a combined tabbed panel
 - [x] `/extract-memories`, `/consolidate-memories`, `/charmemory-debug` slash commands
 - [x] Auto-migration from old `## Memory N` format and flat text
 - [x] Guards: inApiCall, streaming check, context change detection
 - [x] Chat-switch awareness: seeds unextracted message count, only advances lastExtractedIndex on successful extraction
 - [x] Auto-reset stale lastExtractedIndex when no memories exist for current chat
+- [x] Extraction cooldown (min. time between auto-extractions, manual bypasses)
+- [x] Per-message buttons (Extract Here, Pin as Memory) on both new and existing messages
+- [x] Improved extraction prompt: FOCUS/AVOID lists, boundary markers to prevent existing memory contamination, past tense, vivid details without play-by-play
+- [x] Tooltips on all UI elements
+- [x] Helpful toast messages (e.g., "no unprocessed messages" suggests Reset Extraction State)
 
 ## Known Issues / To Investigate
 
@@ -28,19 +32,18 @@ Core functionality implemented:
 - [ ] Test behavior when switching characters mid-extraction
 - [ ] Test with very large memory files (performance of delete-then-reupload)
 - [ ] Verify vectorization picks up file changes after re-upload (delete + upload cycle)
-- [ ] Stats bar file status doesn't clear when "Clear All Memories" is used (display not refreshed)
 - [ ] Verify NanoGPT API key is stored securely (currently in extension_settings, same as other ST credentials — check if ST encrypts at rest)
+- [ ] Small LLMs (e.g., GLM 4.7 Flash) produce low-quality extractions: reversed facts, contamination from existing memories. Document recommended models.
 
 ## Planned Improvements
 
-### Next — UX & Polish
+### Next — Extraction Quality
 
-- [ ] Combine Activity Log and Diagnostics into a single unified panel
-- [ ] Richer stats bar: show latest extraction count, chat name; make items clickable to open relevant views (memory manager, memory file, etc.)
-- [ ] Fix stats bar not updating after "Clear All Memories"
-- [ ] Search within memories from the UI
-- [ ] Add error recovery if extraction fails mid-way (don't lose existing file)
-- [ ] Add character name to memory file header for clarity
+- [ ] Experiment with splitting the prompt: send existing memories as a "deduplication checklist" rather than full text, to reduce contamination risk
+- [ ] Add option to limit how many existing memories are sent (e.g., only most recent N blocks)
+- [ ] Multi-pass extraction: extract then verify/refine with a second LLM call
+- [ ] Memory categories/tags (relationships, events, facts, emotions)
+- [ ] Per-character extraction prompt overrides
 
 ### Next — Multi-Provider LLM Support
 
@@ -59,23 +62,18 @@ Core functionality implemented:
 - [ ] Preserve provenance: track which original memories were merged into a consolidated one
 - [ ] Undo at the bullet level, not just whole-consolidation undo
 
-### Future — Smarter Extraction
+### Future — UX
 
-- [ ] Memory categories/tags (relationships, events, facts, emotions)
-- [ ] Configurable extraction triggers beyond message count (e.g., keyword-based)
-- [ ] Multi-pass extraction: extract then verify/refine
-- [ ] Extract relationship maps (character A's relationship with character B)
-- [ ] Emotional state tracking over time
-- [ ] Allow different extraction prompts per character
-- [ ] Option to extract from user messages too (not just character)
-- [ ] Export/import memories between characters
+- [ ] Search within memories from the UI
+- [ ] Add error recovery if extraction fails mid-way (don't lose existing file)
+- [ ] Add character name to memory file header for clarity
+- [ ] Show token count of current memory file
 
 ### Future — Diagnostics & Debugging
 
 - [ ] Per-message diagnostic icon showing what was injected for that generation
 - [ ] Diagnostic diff view: what changed between generations
 - [x] Log extraction history (Activity Log panel)
-- [ ] Show token count of current memory file
 
 ### Future Ideas (Not Yet Prioritized)
 
@@ -83,6 +81,7 @@ Core functionality implemented:
 - [ ] Cross-character memories (shared world state)
 - [ ] Memory conflict detection (contradictory facts)
 - [ ] Integration with ST's built-in Summarize extension (use summary as extraction context)
+- [ ] Export/import memories between characters
 
 ## Architecture Notes
 
@@ -120,10 +119,11 @@ sillytavern-character-memory/
 - **Data Bank CRUD**: delete-then-reupload pattern (matches ST's attachments/index.js)
 - **Settings**: `extension_settings.charMemory` with defaults merge pattern
 - **Per-chat state**: `chat_metadata.charMemory` with `saveMetadataDebounced()`
-- **Event hooks**: `CHARACTER_MESSAGE_RENDERED` for counting, `WORLD_INFO_ACTIVATED` for diagnostics
+- **Session state**: `lastExtractionTime` (cooldown), `cooldownTimerInterval` — not persisted, reset on page load
+- **Event hooks**: `CHARACTER_MESSAGE_RENDERED` for counting, `CHAT_CHANGED` for button injection, `WORLD_INFO_ACTIVATED` for diagnostics
 - **LLM calls**: `generateQuietPrompt` (main LLM), `generateWebLlmChatPrompt` (WebLLM), or NanoGPT direct API
 - **Output cleanup**: `removeReasoningFromString` to strip reasoning tags from LLM output
-- **Guards**: `inApiCall` flag, `streamingProcessor.isFinished` check, context change detection
+- **Guards**: `inApiCall` flag, `streamingProcessor.isFinished` check, context change detection, cooldown check
 
 ### Import Map (from extension location)
 

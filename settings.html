@@ -8,47 +8,47 @@
 
             <!-- Stats bar — always visible -->
             <div class="charMemory_statsBar">
-                <div class="charMemory_statItem">
+                <div class="charMemory_statItem" title="The Data Bank file where memories are stored for this character">
                     <i class="fa-solid fa-file-lines fa-sm"></i>
-                    <span id="charMemory_statFile" title="Active memory file">No character</span>
+                    <span id="charMemory_statFile">No character</span>
                 </div>
-                <div class="charMemory_statItem">
+                <div class="charMemory_statItem" title="Total number of individual memory bullets stored">
                     <i class="fa-solid fa-brain fa-sm"></i>
-                    <span id="charMemory_statCount" title="Stored memories">0 memories</span>
+                    <span id="charMemory_statCount">0 memories</span>
                 </div>
-                <div class="charMemory_statItem">
+                <div class="charMemory_statItem" title="New messages since last extraction / auto-extraction threshold. When this fills up, extraction triggers automatically.">
                     <i class="fa-solid fa-arrows-rotate fa-sm"></i>
-                    <span id="charMemory_statProgress" title="Extraction progress">0/10 msgs</span>
+                    <span id="charMemory_statProgress">0/10 msgs</span>
                 </div>
-                <div class="charMemory_statItem">
+                <div class="charMemory_statItem" title="Time remaining before the next auto-extraction is allowed. Manual extractions bypass this.">
                     <i class="fa-solid fa-clock fa-sm"></i>
-                    <span id="charMemory_statCooldown" title="Cooldown status">Ready</span>
+                    <span id="charMemory_statCooldown">Ready</span>
                 </div>
             </div>
 
             <div class="charMemory_statusRow">
-                <label class="checkbox_label" for="charMemory_enabled">
+                <label class="checkbox_label" for="charMemory_enabled" title="When enabled, memories are extracted automatically after a set number of new messages">
                     <input type="checkbox" id="charMemory_enabled" />
                     <span>Enable automatic extraction</span>
                 </label>
             </div>
 
             <div class="charMemory_buttonRow">
-                <input type="button" id="charMemory_extractNow" class="menu_button" value="Extract Now" title="Run memory extraction on recent messages" />
-                <input type="button" id="charMemory_manageMemories" class="menu_button" value="View / Edit" title="Browse and edit stored memories" />
-                <input type="button" id="charMemory_consolidate" class="menu_button" value="Consolidate" title="Merge duplicate and related memories" />
-                <input type="button" id="charMemory_undoConsolidate" class="menu_button" value="Undo Consolidation" title="Restore memories from before the last consolidation" disabled />
+                <input type="button" id="charMemory_extractNow" class="menu_button" value="Extract Now" title="Extract memories from unprocessed messages. If all messages have been processed, use 'Reset Extraction State' first to re-read from the beginning." />
+                <input type="button" id="charMemory_manageMemories" class="menu_button" value="View / Edit" title="Browse, edit, and delete individual stored memories" />
+                <input type="button" id="charMemory_consolidate" class="menu_button" value="Consolidate" title="Use the LLM to merge duplicate and related memories into fewer, cleaner entries" />
+                <input type="button" id="charMemory_undoConsolidate" class="menu_button" value="Undo Consolidation" title="Restore memories from before the last consolidation (session only)" disabled />
             </div>
 
             <div class="charMemory_sliderRow">
-                <label for="charMemory_interval">
-                    <small>Extract every <span id="charMemory_intervalValue">10</span> messages</small>
+                <label for="charMemory_interval" title="How many new messages trigger an automatic extraction. Only counts messages received after the last extraction.">
+                    <small>Auto-extract every <span id="charMemory_intervalValue">10</span> new messages</small>
                 </label>
                 <input type="range" id="charMemory_interval" min="3" max="50" step="1" value="10" />
             </div>
 
             <div class="charMemory_sliderRow">
-                <label for="charMemory_minCooldown">
+                <label for="charMemory_minCooldown" title="Minimum time between auto-extractions, even if the message threshold is met. Prevents rapid-fire extractions. Manual 'Extract Now' bypasses this.">
                     <small>Min. cooldown: <span id="charMemory_minCooldownValue">10</span> min</small>
                 </label>
                 <input type="range" id="charMemory_minCooldown" min="0" max="30" step="1" value="10" />
@@ -62,7 +62,7 @@
                 </div>
                 <div class="inline-drawer-content">
                     <div class="charMemory_statusRow">
-                        <label for="charMemory_source">
+                        <label for="charMemory_source" title="Which LLM to use for memory extraction and consolidation">
                             <small>Extraction source</small>
                         </label>
                         <select id="charMemory_source" class="text_pole">
@@ -76,7 +76,7 @@
                                 <label><small>NanoGPT API Key</small></label>
                                 <div style="display:flex;gap:5px;align-items:center;">
                                     <input type="password" id="charMemory_nanogptApiKey" class="text_pole" placeholder="Enter API key" style="flex:1;" />
-                                    <input type="button" id="charMemory_nanogptTest" class="menu_button" value="Test" title="Test API connection" />
+                                    <input type="button" id="charMemory_nanogptTest" class="menu_button" value="Test" title="Send a minimal request to verify your API key works" />
                                 </div>
                             </div>
                             <div class="charMemory_statusRow">
@@ -101,14 +101,14 @@
                     </div>
 
                     <div class="charMemory_sliderRow">
-                        <label for="charMemory_maxMessages">
+                        <label for="charMemory_maxMessages" title="Maximum number of chat messages sent to the LLM in a single extraction. Higher values give more context but cost more tokens. Only the most recent unprocessed messages are included.">
                             <small>Max messages per extraction: <span id="charMemory_maxMessagesValue">20</span></small>
                         </label>
                         <input type="range" id="charMemory_maxMessages" min="5" max="50" step="1" value="20" />
                     </div>
 
                     <div class="charMemory_sliderRow">
-                        <label for="charMemory_responseLength">
+                        <label for="charMemory_responseLength" title="Maximum tokens the LLM can use for its response. Increase if extractions seem truncated.">
                             <small>Response length (tokens): <span id="charMemory_responseLengthValue">500</span></small>
                         </label>
                         <input type="range" id="charMemory_responseLength" min="100" max="2000" step="50" value="500" />
@@ -117,7 +117,7 @@
                     <hr class="charMemory_separator" />
 
                     <div class="charMemory_statusRow">
-                        <label class="checkbox_label" for="charMemory_perChat">
+                        <label class="checkbox_label" for="charMemory_perChat" title="When enabled, each chat gets its own memory file. When disabled, all chats for a character share one file.">
                             <input type="checkbox" id="charMemory_perChat" />
                             <span>Separate memories per chat</span>
                         </label>
@@ -125,7 +125,7 @@
                     </div>
 
                     <div class="charMemory_statusRow">
-                        <label for="charMemory_fileName">
+                        <label for="charMemory_fileName" title="Override the auto-generated file name. Leave blank to use the default (based on character name).">
                             <small>File name override</small>
                         </label>
                         <input type="text" id="charMemory_fileName" class="text_pole" placeholder="(auto-generated from character name)" />
@@ -135,19 +135,19 @@
                     <hr class="charMemory_separator" />
 
                     <div class="charMemory_promptSection">
-                        <label for="charMemory_extractionPrompt">
+                        <label for="charMemory_extractionPrompt" title="The prompt sent to the LLM for memory extraction. Uses {{charName}}, {{existingMemories}}, {{recentMessages}}, {{char}}, and {{user}} placeholders.">
                             <small>Extraction prompt</small>
                         </label>
                         <textarea id="charMemory_extractionPrompt" class="text_pole textarea_compact" rows="8" placeholder="Enter extraction prompt..."></textarea>
-                        <input type="button" id="charMemory_restorePrompt" class="menu_button" value="Restore Default Prompt" />
+                        <input type="button" id="charMemory_restorePrompt" class="menu_button" value="Restore Default Prompt" title="Replace the current prompt with the built-in default" />
                     </div>
 
                     <hr class="charMemory_separator" />
 
                     <div class="charMemory_statusRow">
-                        <input type="button" id="charMemory_resetTracking" class="menu_button" value="Reset Extraction State" title="Reset extraction tracking so the next extraction re-reads all messages" />
-                        <small class="charMemory_helperText">Resets extraction tracking without deleting memories. Use after editing or deleting memories so the LLM can re-extract from earlier messages.</small>
-                        <input type="button" id="charMemory_resetExtraction" class="menu_button charMemory_dangerBtn" value="Clear All Memories" title="Delete all memories and reset extraction state" />
+                        <input type="button" id="charMemory_resetTracking" class="menu_button" value="Reset Extraction State" title="Reset the extraction pointer to the beginning of the chat so all messages can be re-processed. Does not delete any memories." />
+                        <small class="charMemory_helperText">Resets extraction tracking without deleting memories. Use this before 'Extract Now' to re-process messages from the beginning.</small>
+                        <input type="button" id="charMemory_resetExtraction" class="menu_button charMemory_dangerBtn" value="Clear All Memories" title="Delete the memory file and reset extraction state. This cannot be undone." />
                         <small class="charMemory_helperText">Deletes the memory file and resets extraction tracking. This cannot be undone.</small>
                     </div>
                 </div>
@@ -166,7 +166,7 @@
                     </div>
                     <div class="charMemory_tabContent" id="charMemory_tabLog">
                         <div class="charMemory_buttonRow">
-                            <input type="button" id="charMemory_clearLog" class="menu_button" value="Clear" />
+                            <input type="button" id="charMemory_clearLog" class="menu_button" value="Clear" title="Clear the activity log" />
                         </div>
                         <div id="charMemory_activityLog" class="charMemory_activityLog" style="max-height:300px;overflow-y:auto;font-size:0.85em;font-family:monospace;">
                             <div class="charMemory_diagEmpty">No activity yet.</div>
@@ -174,7 +174,7 @@
                     </div>
                     <div class="charMemory_tabContent" id="charMemory_tabDiag" style="display:none;">
                         <div class="charMemory_buttonRow">
-                            <input type="button" id="charMemory_refreshDiag" class="menu_button" value="Refresh" />
+                            <input type="button" id="charMemory_refreshDiag" class="menu_button" value="Refresh" title="Capture current diagnostics (lorebook entries, extension prompts, memory file status)" />
                         </div>
                         <div id="charMemory_diagnosticsContent" class="charMemory_diagnosticsContent">
                             <div class="charMemory_diagEmpty">Click "Refresh" after a generation to see diagnostics.</div>

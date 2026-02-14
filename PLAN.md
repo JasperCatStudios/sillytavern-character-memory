@@ -49,6 +49,16 @@ Core functionality implemented:
 - [ ] Shared config pattern: URL, API key, model selector, test button
 - [ ] Provider-specific options (temperature, system prompt override, etc.)
 
+### Next — Rethink Consolidation & Deduplication
+
+- [ ] More granular control over consolidation — current approach is all-or-nothing (send everything to LLM, accept/reject entire result)
+- [ ] Per-block or per-bullet consolidation: select which memory blocks to consolidate rather than all at once
+- [ ] Deduplication as a separate step from consolidation (detect duplicates, let user review and merge/delete individually)
+- [ ] Side-by-side diff view showing exactly what changed per bullet during consolidation
+- [ ] Configurable consolidation strategies: merge duplicates only, summarize related, or aggressive compression
+- [ ] Preserve provenance: track which original memories were merged into a consolidated one
+- [ ] Undo at the bullet level, not just whole-consolidation undo
+
 ### Future — Smarter Extraction
 
 - [ ] Memory categories/tags (relationships, events, facts, emotions)

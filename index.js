@@ -1504,8 +1504,12 @@ function updateDiagnosticsDisplay() {
                 }
             }
             if (matched.length === 0) {
-                el.textContent = 'No matching memory bullets found in injected chunks';
-                el.classList.add('charMemory_diagEmpty');
+                const preview = injectedText.length > 500 ? injectedText.substring(0, 500) + '...' : injectedText;
+                let fallbackHtml = '<div class="charMemory_diagCard">';
+                fallbackHtml += '<div class="charMemory_diagCardTitle">No matching bullets — raw injected text:</div>';
+                fallbackHtml += `<div class="charMemory_diagCardContent" style="white-space:pre-wrap;">${escapeHtml(preview)}</div>`;
+                fallbackHtml += '</div>';
+                el.innerHTML = fallbackHtml;
                 return;
             }
             let matchHtml = `<div class="charMemory_diagCard"><div class="charMemory_diagCardTitle">${matched.length} memor${matched.length === 1 ? 'y' : 'ies'} injected</div>`;

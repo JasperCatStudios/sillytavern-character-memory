@@ -14,6 +14,8 @@ Chat happens (every N character messages)
 ```
 
 - **Automatic**: Extracts memories every N character messages (configurable, default 10) with cooldown to prevent rapid-fire
+- **Chunked**: Loops through all unprocessed messages in chunks — no messages are silently skipped
+- **Batch extraction**: Extract memories from all (or selected) chats for a character, not just the active one
 - **Visible**: Memories stored as a plain markdown file in character Data Bank — fully viewable and editable
 - **Per-bullet management**: Browse, edit, or delete individual memory bullets from the Memory Manager
 - **Consolidation**: Merge duplicate and related memories with preview before applying and one-click undo
@@ -48,7 +50,7 @@ Restart SillyTavern after installation.
 5. Use **View / Edit** to browse and manage individual memories
 6. Use **Consolidate** to merge duplicates when the file grows large — a Before/After preview is shown before changes are applied
 7. Use **Undo Consolidation** to restore the previous memories if the consolidation result isn't satisfactory
-8. Use **Reset Extraction State** (in Settings) after editing or deleting memories so the next extraction re-reads all messages
+8. Use **Batch Extract** (in Tools & Diagnostics) to extract memories from multiple chats at once
 
 ### Stats Bar
 
@@ -74,6 +76,19 @@ Each message in the chat gets additional buttons in its action bar (visible on h
 
 These buttons appear on all messages, including those that were already in the chat when it loaded.
 
+### Batch Extraction
+
+Extract memories from multiple chats at once, useful for backfilling memories from existing conversations.
+
+1. Open **Tools & Diagnostics** → **Batch Extract** tab
+2. Click **Refresh** to load the list of chats for the current character
+3. Select the chats you want to extract from (use Select All to check all)
+4. Click **Extract Selected** — a confirmation popup shows the total
+5. Progress bar shows which chat is being processed and chunk progress
+6. Use **Stop** to cancel mid-extraction (progress is saved per-chunk)
+
+Batch extraction uses the same chunked extraction as single-chat mode. Each chat's extraction state is tracked separately, so re-running batch extraction only processes new messages.
+
 ### Memory Format
 
 Memories are stored as `<memory>` tag blocks with chat attribution:
@@ -84,6 +99,8 @@ Memories are stored as `<memory>` tag blocks with chat attribution:
 - She has two older brothers.
 </memory>
 ```
+
+Multiple chunks from the same chat are automatically merged into a single block.
 
 Old `## Memory N` format files are auto-migrated on first read.
 
@@ -97,20 +114,48 @@ Old `## Memory N` format files are auto-migrated on first read.
 
 ### Settings
 
+Settings are organized in the **Settings** drawer:
+
+#### LLM Provider
+
 | Setting | Default | Description |
 |---------|---------|-------------|
-| Extraction source | Main LLM | Choose between Main LLM, WebLLM (browser-local), or NanoGPT (direct API) |
-| Auto-extract interval | 10 | How many new messages trigger an automatic extraction |
-| Min. cooldown | 10 min | Minimum time between auto-extractions (manual Extract Now bypasses this) |
-| Max messages | 20 | Max messages included per extraction call |
-| Response length | 800 | Token limit for LLM extraction response |
-| Per-chat memories | Off | Separate memory file per chat instead of per character |
+| LLM Provider | Main LLM | Choose between Main LLM, WebLLM (browser-local), or NanoGPT (direct API) |
+
+#### Auto-Extraction
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| Extract after every N messages | 10 | How many new messages trigger an automatic extraction |
+| Minimum wait between extractions | 10 min | Minimum time between auto-extractions (manual Extract Now bypasses this) |
+
+These only affect automatic extraction. Manual extraction and batch extraction ignore them.
+
+#### Extraction Settings
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| Messages per LLM call | 20 | How many messages to include in each LLM call. The system loops through all unprocessed messages in chunks of this size. |
+| Max response length | 500 | Token limit for LLM extraction response per chunk |
+
+#### Storage
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| Separate memories per chat | Off | Each chat gets its own memory file instead of sharing one per character |
 | File name override | (auto) | Custom file name; leave blank for auto-naming from character name |
-| Extraction prompt | (built-in) | Fully customizable, with Restore Default |
+
+#### Advanced
+
+| Setting | Description |
+|---------|-------------|
+| Extraction prompt | Fully customizable prompt template with Restore Default |
+| Reset Extraction State | Resets extraction tracking for all chats (active + batch) without deleting memories |
+| Clear All Memories | Deletes the memory file and resets all extraction tracking |
 
 ### NanoGPT Settings
 
-When NanoGPT is selected as the extraction source, additional settings appear:
+When NanoGPT is selected as the LLM provider, additional settings appear:
 
 | Setting | Description |
 |---------|-------------|
@@ -153,17 +198,22 @@ Memory extraction is a structured task that requires strong instruction followin
 - **Memories reverse who did what**: Same issue — model too small for accurate comprehension. Use a larger model.
 - **Memories are too detailed / play-by-play**: Customize the AVOID section in the extraction prompt to be more specific about what granularity you want.
 - **"No unprocessed messages" on Extract Now**: All messages have already been processed. Click "Reset Extraction State" first to re-read from the beginning, then "Extract Now".
+- **Memories contain system metadata, relationship metrics, or image prompts**: The extension strips code blocks, markdown tables, `<details>` sections, and HTML tags before sending messages to the LLM. If metadata still leaks through, customize the AVOID section in the extraction prompt.
 
 ### Tips
 
-- **Extract Now only processes unread messages.** After extraction, the pointer advances to the last message. To re-extract, click "Reset Extraction State" first.
+- **Extract Now processes all unread messages in chunks.** The system loops through all unprocessed messages, sending them to the LLM in groups of "Messages per LLM call" size. For large backlogs (>3 chunks), a confirmation popup appears.
 - **The "Extract Here" brain button** on individual messages lets you target specific parts of a conversation without resetting the whole extraction state.
-- **Max messages per extraction** limits how many messages the LLM sees at once. If your chat is 50 messages long but max is 20, only the most recent 20 unprocessed messages are sent. Increase this slider for longer chats, but be aware of token costs.
-- **Cooldown only affects auto-extraction.** Manual "Extract Now" and the per-message brain button always work immediately.
+- **Messages per LLM call** controls chunk size. If set to 20 and there are 100 unprocessed messages, extraction makes ~5 API calls. Smaller chunks are cheaper but may miss cross-message context. Default of 20 works well; 50+ may cause timeouts with some models.
+- **Cooldown only affects auto-extraction.** Manual "Extract Now", per-message brain button, and batch extraction always work immediately.
 
-## Activity & Diagnostics
+## Tools & Diagnostics
 
-The Activity & Diagnostics panel (below Settings) contains two tabs:
+The Tools & Diagnostics panel (below Settings) contains three tabs:
+
+### Batch Extract
+
+Extract memories from multiple chats for the current character. See [Batch Extraction](#batch-extraction) above.
 
 ### Activity Log
 
@@ -176,6 +226,8 @@ Shows timestamped events for debugging:
 - Cooldown skip notifications
 - Errors and warnings
 
+Enable **Verbose** mode to see full LLM prompts and responses as collapsible entries — useful for debugging extraction quality issues.
+
 ### Diagnostics
 
 Shows what was injected into the last generation:
@@ -187,6 +239,12 @@ Shows what was injected into the last generation:
 
 This helps answer "are my memories being vectorized?" and "are my lorebooks even working?" without digging through logs.
 
+## Important Notes
+
+- **Reset Extraction State** resets tracking for the active chat and all batch extraction state for the character. It does not delete any memories. Use this before "Extract Now" or "Batch Extract" to re-process messages from the beginning.
+- **Clear All Memories** deletes the memory file for the current character. In default mode (not per-chat), this file contains memories from **all** of that character's chats — so it clears all chats' memories for that character, not just the active chat's.
+- **Separate memories per chat** mode gives each chat its own memory file. Note: batch extraction in per-chat mode is not fully supported yet.
+
 ## Requirements
 
 - SillyTavern with a working LLM API connection
@@ -197,15 +255,18 @@ This helps answer "are my memories being vectorized?" and "are my lorebooks even
 
 The extension listens for `CHARACTER_MESSAGE_RENDERED` events and counts character messages. When the interval is reached and cooldown has elapsed, it:
 
-1. Collects messages since the last extraction (up to max messages limit)
-2. Reads the existing memory file from character Data Bank
-3. Sends both to the LLM with an extraction prompt (existing memories are clearly bounded with markers to prevent contamination)
-4. If the LLM returns new `<memory>` blocks with bullets, appends them with chat ID and timestamp metadata
-5. If it returns `NO_NEW_MEMORIES`, skips the update
+1. Collects unprocessed messages in chunks (up to "Messages per LLM call" per chunk)
+2. Strips non-diegetic content (code blocks, markdown tables, `<details>` sections, HTML tags) from messages before sending
+3. Reads the existing memory file from character Data Bank
+4. Sends both to the LLM with an extraction prompt (existing memories are clearly bounded with markers to prevent contamination)
+5. If the LLM returns new `<memory>` blocks with bullets, appends them with chat ID and timestamp metadata
+6. If it returns `NO_NEW_MEMORIES`, skips the update
+7. Advances the extraction pointer and repeats for the next chunk until all unprocessed messages are covered
+8. Merges memory blocks from the same chat into a single block
 
 The extraction prompt instructs the LLM to output `<memory>` blocks containing bulleted lists of third-person facts about the character. It includes:
 - A FOCUS list of what to extract (life events, relationships, preferences, emotional developments, significant encounters)
-- An AVOID list of what to skip (repetitive minutiae, temporary states, dialogue filler)
+- An AVOID list of what to skip (repetitive minutiae, temporary states, dialogue filler, system metadata)
 - Clear boundary markers between existing memories and new chat content
 - Instructions to write in past tense and capture vivid memorable details without sequential play-by-play
 

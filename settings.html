@@ -159,10 +159,10 @@
                     <hr class="charMemory_separator" />
 
                     <div class="charMemory_statusRow">
-                        <input type="button" id="charMemory_resetTracking" class="menu_button" value="Reset Extraction State" title="Reset the extraction pointer to the beginning of the chat so all messages can be re-processed. Does not delete any memories." />
-                        <small class="charMemory_helperText">Resets extraction tracking without deleting memories. Use this before 'Extract Now' to re-process messages from the beginning.</small>
-                        <input type="button" id="charMemory_resetExtraction" class="menu_button charMemory_dangerBtn" value="Clear All Memories" title="Delete the memory file and reset extraction state. This cannot be undone." />
-                        <small class="charMemory_helperText">Deletes the memory file and resets extraction tracking. This cannot be undone.</small>
+                        <input type="button" id="charMemory_resetTracking" class="menu_button" value="Reset Extraction State" title="Reset extraction tracking for all of this character's chats so all messages can be re-processed. Does not delete any memories." />
+                        <small class="charMemory_helperText">Resets extraction tracking for all chats (active + batch). Use before 'Extract Now' or 'Batch Extract' to re-process from the beginning.</small>
+                        <input type="button" id="charMemory_resetExtraction" class="menu_button charMemory_dangerBtn" value="Clear All Memories" title="Delete the memory file and reset extraction state for all chats. This cannot be undone." />
+                        <small class="charMemory_helperText">Deletes the memory file and resets extraction tracking for all chats. This cannot be undone.</small>
                     </div>
                 </div>
             </div>

@@ -1946,8 +1946,21 @@ function setupListeners() {
         chat_metadata[MODULE_NAME].lastExtractedIndex = -1;
         chat_metadata[MODULE_NAME].messagesSinceExtraction = 0;
         saveMetadataDebounced();
+
+        // Also clear batch state for all chats of this character
+        const charName = getCharacterName();
+        if (charName && extension_settings[MODULE_NAME].batchState) {
+            const prefix = `${charName}:`;
+            for (const key of Object.keys(extension_settings[MODULE_NAME].batchState)) {
+                if (key.startsWith(prefix)) {
+                    delete extension_settings[MODULE_NAME].batchState[key];
+                }
+            }
+            saveSettingsDebounced();
+        }
+
         updateStatusDisplay();
-        toastr.success('Extraction state reset. Next extraction will re-read all messages.', 'CharMemory');
+        toastr.success('Extraction state reset for all chats. Next extraction will re-read all messages.', 'CharMemory');
     });
 
     $('#charMemory_resetExtraction').off('click').on('click', async function () {
@@ -1955,6 +1968,18 @@ function setupListeners() {
         chat_metadata[MODULE_NAME].lastExtractedIndex = -1;
         chat_metadata[MODULE_NAME].messagesSinceExtraction = 0;
         saveMetadataDebounced();
+
+        // Also clear batch state for all chats of this character
+        const charName = getCharacterName();
+        if (charName && extension_settings[MODULE_NAME].batchState) {
+            const prefix = `${charName}:`;
+            for (const key of Object.keys(extension_settings[MODULE_NAME].batchState)) {
+                if (key.startsWith(prefix)) {
+                    delete extension_settings[MODULE_NAME].batchState[key];
+                }
+            }
+            saveSettingsDebounced();
+        }
 
         // Also clear stored memories so re-extraction starts fresh
         const existing = findMemoryAttachment();
@@ -1966,7 +1991,7 @@ function setupListeners() {
         $('#charMemory_statCount').text('0 memories');
         $('#charMemory_statProgress').text(`0/${extension_settings[MODULE_NAME].interval} msgs`);
         updateStatusDisplay();
-        toastr.success('Memories cleared and extraction state reset. Next extraction will start from the beginning.', 'CharMemory');
+        toastr.success('Memories cleared and extraction state reset for all chats. Next extraction will start from the beginning.', 'CharMemory');
     });
 
     $('#charMemory_fileName').off('input').on('input', function () {

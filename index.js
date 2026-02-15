@@ -1622,9 +1622,9 @@ async function deleteBlock(blockIndex) {
 function buildConsolidationPreview(beforeBlocks, afterBlocks, beforeCount, afterCount) {
     const renderSection = (title, blocks, count) => {
         const cards = blocks.map(b => {
-            const bullets = b.bullets.map(bullet => `<li>${bullet}</li>`).join('');
+            const bullets = b.bullets.map(bullet => `<li>${escapeHtml(bullet)}</li>`).join('');
             return `<div class="charMemory_card">
-                <div class="charMemory_cardHeader"><strong>${b.chat}</strong> <span class="charMemory_cardDate">${b.date}</span></div>
+                <div class="charMemory_cardHeader"><strong>${escapeHtml(b.chat)}</strong> <span class="charMemory_cardDate">${escapeHtml(b.date)}</span></div>
                 <ul>${bullets}</ul>
             </div>`;
         }).join('');

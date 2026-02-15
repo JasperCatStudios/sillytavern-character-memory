@@ -1474,57 +1474,34 @@ function updateDiagnosticsDisplay() {
     }
 
     if (dbPrompt && dbPrompt.content) {
-        // Strip the file_template_db wrapper to isolate chunk text
-        let injectedText = dbPrompt.content;
-        const template = extension_settings.vectors?.file_template_db || '';
-        if (template && template.includes('{{text}}')) {
-            const [before, after] = template.split('{{text}}');
-            const substBefore = before ? substituteParamsExtended(before) : '';
-            const substAfter = after ? substituteParamsExtended(after) : '';
-            if (substBefore && injectedText.startsWith(substBefore)) {
-                injectedText = injectedText.slice(substBefore.length);
-            }
-            if (substAfter && injectedText.endsWith(substAfter)) {
-                injectedText = injectedText.slice(0, -substAfter.length);
-            }
-        }
-        injectedText = injectedText.trim();
+        // Parse <memory> blocks directly from the injected chunks
+        const injectedText = dbPrompt.content;
+        const injectedBlocks = parseMemories(injectedText);
 
-        // Match individual memory bullets against the injected chunk text
-        readMemories().then(content => {
+        setTimeout(() => {
             const el = document.getElementById('charMemory_diagInjected');
             if (!el) return;
-            const blocks = parseMemories(content);
-            const matched = [];
-            for (const block of blocks) {
-                for (const bullet of block.bullets) {
-                    if (injectedText.includes(bullet)) {
-                        matched.push(bullet);
+
+            if (injectedBlocks.length > 0) {
+                const totalBullets = injectedBlocks.reduce((sum, b) => sum + b.bullets.length, 0);
+                let blockHtml = `<div class="charMemory_diagCard"><div class="charMemory_diagCardTitle">${totalBullets} memor${totalBullets === 1 ? 'y' : 'ies'} injected from ${injectedBlocks.length} block${injectedBlocks.length === 1 ? '' : 's'}</div>`;
+                for (const block of injectedBlocks) {
+                    for (const bullet of block.bullets) {
+                        blockHtml += `<div class="charMemory_diagCardContent">- ${escapeHtml(bullet)}</div>`;
                     }
                 }
-            }
-            if (matched.length === 0) {
-                const preview = injectedText.length > 500 ? injectedText.substring(0, 500) + '...' : injectedText;
+                blockHtml += '</div>';
+                el.innerHTML = blockHtml;
+            } else {
+                // No <memory> blocks found — show raw text preview as fallback
+                const preview = injectedText.length > 800 ? injectedText.substring(0, 800) + '...' : injectedText;
                 let fallbackHtml = '<div class="charMemory_diagCard">';
-                fallbackHtml += '<div class="charMemory_diagCardTitle">No matching bullets — raw injected text:</div>';
+                fallbackHtml += '<div class="charMemory_diagCardTitle">Injected text (no structured memory blocks found):</div>';
                 fallbackHtml += `<div class="charMemory_diagCardContent" style="white-space:pre-wrap;">${escapeHtml(preview)}</div>`;
                 fallbackHtml += '</div>';
                 el.innerHTML = fallbackHtml;
-                return;
             }
-            let matchHtml = `<div class="charMemory_diagCard"><div class="charMemory_diagCardTitle">${matched.length} memor${matched.length === 1 ? 'y' : 'ies'} injected</div>`;
-            for (const bullet of matched) {
-                matchHtml += `<div class="charMemory_diagCardContent">- ${escapeHtml(bullet)}</div>`;
-            }
-            matchHtml += '</div>';
-            el.innerHTML = matchHtml;
-        }).catch(() => {
-            const el = document.getElementById('charMemory_diagInjected');
-            if (el) {
-                el.textContent = 'Failed to match memories';
-                el.classList.add('charMemory_diagEmpty');
-            }
-        });
+        }, 0);
     }
 
     // Character Lorebooks (static)

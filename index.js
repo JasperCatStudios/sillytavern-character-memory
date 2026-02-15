@@ -192,7 +192,7 @@ const PROVIDER_PRESETS = {
         modelsEndpoint: 'standard',
         requiresApiKey: true,
         extraHeaders: { 'HTTP-Referer': 'https://sillytavern.app', 'X-Title': 'SillyTavern CharMemory' },
-        defaultModel: '',
+        defaultModel: 'openai/gpt-4.1-nano',
         helpUrl: 'https://openrouter.ai/keys',
     },
     groq: {
@@ -1301,11 +1301,15 @@ async function testProviderConnection() {
     }
 
     const $btn = $('#charMemory_providerTest');
-    $btn.prop('disabled', true);
+    $btn.prop('disabled', true).val('Testing...');
 
     try {
         const baseUrl = resolveBaseUrl(preset, providerSettings);
-        const testModel = providerSettings.model || preset.defaultModel || 'gpt-4.1-nano';
+        const testModel = providerSettings.model || preset.defaultModel;
+        if (!testModel) {
+            toastr.warning('Select a model first, then test.', 'CharMemory');
+            return;
+        }
         const testMessages = [{ role: 'user', content: 'Say OK' }];
 
         if (preset.isAnthropic) {
@@ -1316,9 +1320,13 @@ async function testProviderConnection() {
 
         logActivity(`${preset.name} connection test successful`, 'success');
         toastr.success('Connection successful!', 'CharMemory');
+        $btn.val('\u2714 OK');
+        setTimeout(() => $btn.val('Test'), 3000);
     } catch (err) {
         logActivity(`${preset.name} connection test failed: ${err.message}`, 'error');
-        toastr.error(err.message || 'Connection failed', 'CharMemory');
+        toastr.error(err.message || 'Connection failed. Check Activity Log for details.', 'CharMemory');
+        $btn.val('\u2718 Fail');
+        setTimeout(() => $btn.val('Test'), 3000);
     } finally {
         $btn.prop('disabled', false);
     }

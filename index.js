@@ -129,25 +129,31 @@ DO NOT EXTRACT:
 - Temporary physical states ("leaned against him", "felt his warmth")
 - Paraphrased dialogue or conversation filler
 - Anything with no lasting significance beyond the immediate moment
+- Facts about {{char}}'s own identity, profession, or abilities that are baseline knowledge (these belong in the character card, not memories)
 
 NEGATIVE EXAMPLE — do NOT write memories like this:
 <bad_example>
-- She approached him at the bar and ordered a negroni.
-- She leaned on the table and signaled the bartender with two fingers.
-- She invaded his personal space to test his reaction.
-- She led him to an observation deck via a keycard.
-- She kissed him while scanning the surroundings.
-- She lit a cigarette one-handed with a practiced flick.
-- She leaned back against him and felt his body heat through her blouse.
-- She rubbed her hips against him to tease him.
-- She led him to his hotel room while scanning for cameras.
-- She positioned herself between his knees in a chair.
+- She picked the lock on the warehouse side door using a tension wrench.
+- She crept through the dark corridor and disabled the security camera.
+- She found the safe behind a false panel in the office.
+- She cracked the combination and retrieved the sealed envelope inside.
+- She climbed out through a ventilation shaft to avoid the front entrance.
+- She crossed two blocks on foot before reaching her getaway vehicle.
+- She handed the envelope to her contact in the parking garage.
+- Her contact opened it, confirmed the contents, and gave her a nod.
 </bad_example>
-This is a play-by-play scene summary. It narrates every beat instead of capturing what matters. A good extraction of the same scene would be 3-4 bullets covering: who, what was significant, and what the outcome was.
+This is a play-by-play scene summary. It narrates every step of the operation instead of capturing what matters.
 
-NOTE: When content is explicit or violent, write what actually happened in concrete terms. Do not sanitize or euphemize. "She shot him twice in the chest" is a memory. "Violence occurred" is not.
+POSITIVE EXAMPLE — the same scene extracted well:
+<good_example>
+- She broke into a warehouse and stole a sealed envelope from a hidden safe.
+- She delivered the envelope to her contact, who confirmed it contained what they needed.
+</good_example>
+Two bullets capture the full encounter: what she accomplished and the outcome. No step-by-step process, no scene-setting.
 
-Each memory block should answer: "If {{char}} mentioned this encounter to someone months later, what details would they include?"
+NOTE: When content is explicit or violent, name the specific outcome — do not sanitize it into vague language. "She killed him with two shots to the chest" is a memory. "Violence occurred" is not. But this does NOT mean narrate each step leading up to it — summarize the outcome, not the process.
+
+Each memory block should answer: "What from this encounter would stick with {{char}} — things they'd tell someone about months later, or that would surface unbidden in their own mind?"
 
 Output ONLY <memory> blocks (or NO_NEW_MEMORIES). No headers, no commentary, no extra text.`;
 

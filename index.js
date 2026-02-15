@@ -236,6 +236,28 @@ function serializeMemories(blocks) {
 }
 
 /**
+ * Merge memory blocks that share the same chat ID and date into single blocks.
+ * Preserves ordering — merged block appears at the position of the first occurrence.
+ * @param {{chat: string, date: string, bullets: string[]}[]} blocks
+ * @returns {{chat: string, date: string, bullets: string[]}[]}
+ */
+function mergeMemoryBlocks(blocks) {
+    const merged = [];
+    const seen = new Map();
+    for (const block of blocks) {
+        const key = `${block.chat}|||${block.date}`;
+        if (seen.has(key)) {
+            seen.get(key).bullets.push(...block.bullets);
+        } else {
+            const copy = { chat: block.chat, date: block.date, bullets: [...block.bullets] };
+            seen.set(key, copy);
+            merged.push(copy);
+        }
+    }
+    return merged;
+}
+
+/**
  * Migrate old memory formats to <memory> tag format if needed.
  * @param {string} content Existing file content.
  * @returns {string} Content in <memory> tag format.
@@ -1140,6 +1162,16 @@ async function extractMemories({
             }
 
             chunksProcessed++;
+        }
+
+        // Merge blocks with the same chat ID + date (from multi-chunk extraction)
+        if (chunksProcessed > 1 && totalMemories > 0) {
+            const allBlocks = parseMemories(await readMemories());
+            const merged = mergeMemoryBlocks(allBlocks);
+            if (merged.length < allBlocks.length) {
+                await writeMemories(serializeMemories(merged));
+                logActivity(`Merged ${allBlocks.length} blocks → ${merged.length} (combined same-chat chunks)`);
+            }
         }
 
         // Final status updates

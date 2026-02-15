@@ -245,7 +245,7 @@ function mergeMemoryBlocks(blocks) {
     const merged = [];
     const seen = new Map();
     for (const block of blocks) {
-        const key = `${block.chat}|||${block.date}`;
+        const key = block.chat;
         if (seen.has(key)) {
             seen.get(key).bullets.push(...block.bullets);
         } else {

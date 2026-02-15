@@ -613,8 +613,8 @@ function collectRecentMessages({ endIndex = null, chatArray = null, lastExtracte
     const lines = [];
     for (const msg of slice) {
         if (msg.is_system) continue;
-        const text = msg.mes ? msg.mes.replace(/<[^>]*>/g, '').trim() : '';
-        if (text) lines.push(`${msg.name}: ${text}`);
+        if (!msg.mes) continue;
+        lines.push(`${msg.name}: ${msg.mes}`);
     }
 
     logActivity(`Collected ${lines.length} messages (indices ${startIndex}-${sliceEnd - 1})`);
@@ -904,6 +904,7 @@ async function extractMemories({
     lastExtractedIdx = null,
     onProgress = null,
     abortSignal = null,
+    progressLabel = null,
 } = {}) {
     const noopResult = { totalMemories: 0, chunksProcessed: 0, lastExtractedIndex: lastExtractedIdx ?? -1 };
 
@@ -996,7 +997,9 @@ async function extractMemories({
             }
 
             // Show progress toast
-            toastr.info(`Extracting chunk ${chunk + 1}/${totalChunks} via ${sourceLabel}...`, 'CharMemory', { timeOut: 3000 });
+            const prefix = progressLabel ? `${progressLabel} — ` : '';
+            const chunkInfo = totalChunks > 1 ? ` (chunk ${chunk + 1}/${totalChunks})` : '';
+            toastr.info(`${prefix}Extracting via ${sourceLabel}${chunkInfo}...`, 'CharMemory', { timeOut: 3000 });
 
             // Call onProgress callback
             if (onProgress) {
@@ -2110,7 +2113,11 @@ async function loadBatchChatList() {
         const count = chat.chat_items || '?';
         const isCurrent = name === currentChatId;
         const label = isCurrent ? `${name} (current)` : name;
-        const lastMsg = chat.last_mes ? new Date(chat.last_mes).toLocaleDateString() : '';
+        let lastMsg = '';
+        if (chat.last_mes) {
+            const d = new Date(chat.last_mes);
+            if (!isNaN(d.getTime())) lastMsg = d.toLocaleDateString();
+        }
 
         const safeName = name.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
         const safeLabel = label.replace(/&/g, '&amp;').replace(/</g, '&lt;');
@@ -2173,13 +2180,16 @@ async function runBatchExtraction() {
 
         logActivity(`Batch: starting chat "${chatName}" (${i + 1}/${selected.length})`);
 
+        const batchProgressLabel = `Chat ${i + 1}/${selected.length}: ${chatName}`;
+
         // If this is the current chat, use the active context
         if (chatName === currentChatId) {
             const result = await extractMemories({
                 force: true,
                 abortSignal: batchAbortController.signal,
+                progressLabel: batchProgressLabel,
                 onProgress: ({ chunk, totalChunks }) => {
-                    $progressText.text(`Chat ${i + 1}/${selected.length}: ${chatName} (chunk ${chunk}/${totalChunks})`);
+                    $progressText.text(`${batchProgressLabel} (chunk ${chunk}/${totalChunks})`);
                 },
             });
             totalMemories += result.totalMemories;
@@ -2206,8 +2216,9 @@ async function runBatchExtraction() {
             chatId: chatName,
             lastExtractedIdx: lastIdx,
             abortSignal: batchAbortController.signal,
+            progressLabel: batchProgressLabel,
             onProgress: ({ chunk, totalChunks }) => {
-                $progressText.text(`Chat ${i + 1}/${selected.length}: ${chatName} (chunk ${chunk}/${totalChunks})`);
+                $progressText.text(`${batchProgressLabel} (chunk ${chunk}/${totalChunks})`);
             },
         });
 

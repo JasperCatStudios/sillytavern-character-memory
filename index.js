@@ -95,6 +95,10 @@ const defaultExtractionPrompt = `You are a memory extraction assistant. Read the
 
 Character name: {{charName}}
 
+===== CHARACTER CARD (baseline knowledge — do NOT extract anything already described here) =====
+{{charCard}}
+===== END CHARACTER CARD =====
+
 ===== EXISTING MEMORIES (reference only — do NOT repeat, rephrase, or remix these) =====
 {{existingMemories}}
 ===== END EXISTING MEMORIES =====
@@ -103,10 +107,10 @@ Character name: {{charName}}
 {{recentMessages}}
 ===== END RECENT CHAT MESSAGES =====
 
-CRITICAL: Only extract memories from the RECENT CHAT MESSAGES section above. The EXISTING MEMORIES section is provided solely so you know what has already been recorded. Do not restate, paraphrase, or recombine anything from existing memories.
+CRITICAL: Only extract memories from the RECENT CHAT MESSAGES section above. The CHARACTER CARD section defines what is already known about {{charName}} — do not re-extract any of it. The EXISTING MEMORIES section shows what has already been recorded — do not restate, paraphrase, or recombine anything from it.
 
 INSTRUCTIONS:
-1. Extract only NEW facts, events, relationships, or character developments NOT already in existing memories.
+1. Extract only NEW facts, events, relationships, or character developments NOT already covered by the character card or existing memories.
 2. Write in past tense, third person. Do NOT quote dialogue verbatim.
 3. Do NOT use emojis.
 4. Wrap output in <memory></memory> tags with a markdown bulleted list (lines starting with "- ").
@@ -115,21 +119,22 @@ INSTRUCTIONS:
 7. If nothing genuinely new or significant, respond with exactly: NO_NEW_MEMORIES
 
 WHAT TO EXTRACT — ask for each item: "Would {{char}} bring this up unprompted weeks or months later?"
-- Backstory reveals, personal history, goals, fears
+- Backstory reveals, personal history, goals, fears (only if NOT already in the character card)
 - Relationship changes (new connections, betrayals, shifts in feeling)
 - Significant events and their outcomes (not the step-by-step process)
-- Stated preferences, opinions, values
+- Stated preferences, opinions, values (only if NOT already in the character card)
 - Skills, possessions, or status changes
 - Emotional turning points
 
 DO NOT EXTRACT:
+- Anything already described in the CHARACTER CARD above — traits, profession, appearance, personality, habits, preferences, or abilities that are baseline knowledge
+- Routine behaviors that simply confirm what the card already says (e.g. if the card says "smoker", don't extract "she smoked a cigarette")
 - Step-by-step accounts of what happened (this is the most common mistake — summarize outcomes, not processes)
 - Individual actions, movements, or position changes during a scene
 - Scene-setting details (room descriptions, weather, clothing, atmosphere)
 - Temporary physical states ("leaned against him", "felt his warmth")
 - Paraphrased dialogue or conversation filler
 - Anything with no lasting significance beyond the immediate moment
-- Facts about {{char}}'s own identity, profession, or abilities that are baseline knowledge (these belong in the character card, not memories)
 
 NEGATIVE EXAMPLE — do NOT write memories like this:
 <bad_example>
@@ -811,6 +816,22 @@ function getCharacterName() {
 }
 
 /**
+ * Get the character card text (description + personality) for the current character.
+ * @returns {string} Combined card text, or empty string if unavailable.
+ */
+function getCharacterCardText() {
+    const character = characters[this_chid];
+    if (!character) return '';
+
+    const parts = [];
+    const desc = character.data?.description || character.description || '';
+    const pers = character.data?.personality || character.personality || '';
+    if (desc.trim()) parts.push(desc.trim());
+    if (pers.trim()) parts.push(pers.trim());
+    return parts.join('\n\n');
+}
+
+/**
  * Find the char-memories.md attachment in character Data Bank.
  * @returns {object|null} The attachment object or null.
  */
@@ -1361,10 +1382,12 @@ function buildExtractionPrompt(existingMemories, recentMessages) {
 
     let memories = existingMemories || '(none yet)';
     let messages = recentMessages;
+    const charCard = getCharacterCardText() || '(not available)';
 
     // Truncate content for WebLLM's smaller context window
     if (isWebLlm) {
         const templateLength = prompt.replace(/\{\{charName\}\}/g, charName)
+            .replace(/\{\{charCard\}\}/g, '')
             .replace(/\{\{existingMemories\}\}/g, '')
             .replace(/\{\{recentMessages\}\}/g, '').length;
         const available = Math.max(WEBLLM_MAX_PROMPT_CHARS - templateLength, 1000);
@@ -1377,6 +1400,7 @@ function buildExtractionPrompt(existingMemories, recentMessages) {
 
     // Do our custom replacements first
     prompt = prompt.replace(/\{\{charName\}\}/g, charName);
+    prompt = prompt.replace(/\{\{charCard\}\}/g, charCard);
     prompt = prompt.replace(/\{\{existingMemories\}\}/g, memories);
     prompt = prompt.replace(/\{\{recentMessages\}\}/g, messages);
 

@@ -56,8 +56,9 @@
                         <select id="charMemory_source" class="text_pole">
                             <option value="main_llm">Main LLM</option>
                             <option value="webllm">WebLLM (browser-local)</option>
-                            <option value="provider">API Provider</option>
+                            <option value="provider">API Provider (recommended)</option>
                         </select>
+                        <small class="charMemory_helperText"><b>API Provider is recommended.</b> Main LLM pollutes the extraction prompt with chat context, system prompts, and other instructions that degrade memory quality. API Provider sends a clean, focused extraction prompt directly to the LLM.</small>
 
                         <div id="charMemory_providerSettings" style="display:none;">
                             <div class="charMemory_statusRow">
@@ -184,7 +185,7 @@
                     <hr class="charMemory_separator" />
 
                     <div class="charMemory_promptSection">
-                        <label for="charMemory_extractionPrompt" title="The prompt sent to the LLM for memory extraction. Uses {{charName}}, {{existingMemories}}, {{recentMessages}}, {{char}}, and {{user}} placeholders.">
+                        <label for="charMemory_extractionPrompt" title="The prompt sent to the LLM for memory extraction. Uses {{charName}}, {{charCard}}, {{existingMemories}}, {{recentMessages}}, {{char}}, and {{user}} placeholders.">
                             <small>Extraction prompt</small>
                         </label>
                         <textarea id="charMemory_extractionPrompt" class="text_pole textarea_compact" rows="8" placeholder="Enter extraction prompt..."></textarea>

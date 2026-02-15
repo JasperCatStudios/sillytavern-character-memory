@@ -125,6 +125,7 @@ AVOID extracting:
 - Moment-to-moment location tracking
 - Actions with no lasting significance
 - Mundane details (routine clothing, weather, small talk, cover stories) unless they played a significant role in the event
+- System metadata, OOC notes, relationship/stat metrics tables, image generation prompts, or any non-diegetic content embedded in messages
 
 NOTE: When an encounter or event is significant, capture the specific details that made it memorable — not generic summaries. Include visceral, sensory, and explicit details where they are what {{char}} would actually remember. "She orgasmed while grinding against his face" is a memory. "She engaged in sexual activity" is not — it's a euphemism that loses the actual experience.
 
@@ -617,7 +618,15 @@ function collectRecentMessages({ endIndex = null, chatArray = null, lastExtracte
         if (!msg.mes) continue;
         // Skip true system messages (narrator/UI messages with no real content)
         if (msg.is_system && !msg.is_user && !msg.name) continue;
-        lines.push(`${msg.name}: ${msg.mes}`);
+        // Strip non-diegetic content: markdown tables, code blocks (image prompts), HTML tags
+        let text = msg.mes;
+        text = text.replace(/```[\s\S]*?```/g, '');                    // code blocks (image prompts)
+        text = text.replace(/<details[\s\S]*?<\/details>/gi, '');      // collapsed details sections
+        text = text.replace(/\|[^\n]*\|(?:\n\|[^\n]*\|)*/g, '');       // markdown tables
+        text = text.replace(/<[^>]*>/g, '');                           // HTML tags
+        text = text.replace(/\n{3,}/g, '\n\n').trim();                 // collapse whitespace
+        if (!text) continue;
+        lines.push(`${msg.name}: ${text}`);
     }
 
     logActivity(`Collected ${lines.length} messages (indices ${startIndex}-${sliceEnd - 1})`);

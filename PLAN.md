@@ -31,7 +31,7 @@ Core functionality implemented:
 - [ ] Test with group chats — currently only handles single character
 - [ ] Test behavior when switching characters mid-extraction
 - [ ] Test with very large memory files (performance of delete-then-reupload)
-- [ ] Verify vectorization picks up file changes after re-upload (delete + upload cycle)
+- [x] Verify vectorization picks up file changes after re-upload (delete + upload cycle) — confirmed: requires manual revectorization, not automatic
 - [ ] Verify NanoGPT API key is stored securely (currently in extension_settings, same as other ST credentials — check if ST encrypts at rest)
 - [ ] Small LLMs (e.g., GLM 4.7 Flash) produce low-quality extractions: reversed facts, contamination from existing memories. Document recommended models.
 
@@ -74,6 +74,10 @@ Core functionality implemented:
 - [ ] Per-message diagnostic icon showing what was injected for that generation
 - [ ] Diagnostic diff view: what changed between generations
 - [x] Log extraction history (Activity Log panel)
+- [x] Fix vectorization status check — pass source/model to `/api/vector/list` (was always showing "No")
+- [x] Show injected memory bullets in diagnostics (extracted from Vector Storage injection)
+- [x] Show character-bound lorebooks with entry counts and trigger keys
+- [x] Split World Info section into static (lorebooks) and runtime (activated entries)
 
 ### Future Ideas (Not Yet Prioritized)
 
@@ -132,11 +136,12 @@ sillytavern-character-memory/
 | `../../../../script.js` | `/script.js` (main ST script) |
 | `../../../extensions.js` | `/scripts/extensions.js` |
 | `../../../chats.js` | `/scripts/chats.js` |
-| `../../../utils.js` | `/scripts/utils.js` |
+| `../../../utils.js` | `/scripts/utils.js` (getStringHash, getCharaFilename) |
 | `../../../reasoning.js` | `/scripts/reasoning.js` |
 | `../../../popup.js` | `/scripts/popup.js` |
 | `../../../slash-commands/SlashCommandParser.js` | `/scripts/slash-commands/SlashCommandParser.js` |
 | `../../../slash-commands/SlashCommand.js` | `/scripts/slash-commands/SlashCommand.js` |
+| `../../../world-info.js` | `/scripts/world-info.js` (world_info, loadWorldInfo) |
 | `../../shared.js` | `/scripts/extensions/shared.js` |
 
 ### Key ST APIs Used

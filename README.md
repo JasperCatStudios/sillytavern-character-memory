@@ -232,18 +232,56 @@ Enable **Verbose** mode to see full LLM prompts and responses as collapsible ent
 
 Shows what was injected into the last generation:
 
-- **Memories**: Active file name, file status, total memory count (bullets and blocks), and vectorization status
-- **Vectorization**: Whether the memory file has been vectorized and how many chunks exist (requires Vector Storage)
-- **Lorebook Entries**: Which World Info entries activated, their keys and content
+- **Memories**: Active file name, file status, total memory count (bullets and blocks)
+- **Vectorization**: Whether the memory file has been vectorized, how many chunks exist, and which embedding source/model is configured (requires Vector Storage)
+- **Injected Memories — Last Generation**: Lists the individual memory bullets that Vector Storage retrieved and injected for the most recent generation. This shows exactly which memories the LLM saw.
+- **Character Lorebooks**: Static list of lorebooks bound to the current character, with entry counts and trigger keys for each entry
+- **Activated Entries — Last Generation**: Which World Info entries actually fired during the last generation, their keys and content
 - **Extension Prompts**: What memory/vector/data bank content was injected
 
-This helps answer "are my memories being vectorized?" and "are my lorebooks even working?" without digging through logs.
+This helps answer "which memories are being retrieved?", "are my lorebooks bound correctly?", and "what did the LLM actually see?" without digging through logs.
 
 ## Important Notes
 
 - **Reset Extraction State** resets tracking for the active chat and all batch extraction state for the character. It does not delete any memories. Use this before "Extract Now" or "Batch Extract" to re-process messages from the beginning.
 - **Clear All Memories** deletes the memory file for the current character. In default mode (not per-chat), this file contains memories from **all** of that character's chats — so it clears all chats' memories for that character, not just the active chat's.
 - **Separate memories per chat** mode gives each chat its own memory file. Note: batch extraction in per-chat mode is not fully supported yet.
+
+## Vector Storage & Data Bank
+
+The extension stores memories as a Data Bank file that Vector Storage vectorizes automatically. There are some important gotchas:
+
+### Memory file format
+
+All Data Bank memory files must use the `<memory>` tag format for the extension to parse them correctly:
+
+```
+<memory chat="imported" date="2024-01-15">
+- Each memory is a bullet line starting with "- "
+- Multiple bullets per block are fine
+</memory>
+```
+
+If you have existing freeform memory files in the Data Bank (e.g., prose paragraphs, `<memories>` tags, or other formats), convert them to `<memory>` blocks with `- ` bullet lines. The diagnostics panel can only display injected memories that use this format.
+
+### Revectorization
+
+Vector Storage does **not** incrementally update — when you revectorize a file, it re-chunks and re-embeds the entire file from scratch. This means:
+
+- **After consolidation**: The memory file changes but the vector index is now stale. Revectorize the file so the index reflects the consolidated content.
+- **After format migration**: If the extension auto-migrates an old format file, the vectorized chunks still contain the old format. Purge vectors and revectorize.
+- **After manual edits**: If you edit the memory file directly, revectorize to update the index.
+
+**Always purge vectors before revectorizing** to ensure stale chunks from the old format are fully removed.
+
+### Recommended Vector Storage settings
+
+| Setting | Recommended | Notes |
+|---------|-------------|-------|
+| Chunk size (Data Bank files) | 3000 chars | Large enough to keep `<memory>` blocks together |
+| Chunk overlap | 10-20% | Prevents chunk boundaries from splitting memory blocks. More important with fewer retrieve chunks. |
+| Retrieve chunks | 5-10 | Retrieves the most semantically relevant memories. Setting this too high (e.g., 44) effectively dumps the entire file, defeating the purpose of semantic search. |
+| Score threshold | 0.2 | Default is fine for most use cases |
 
 ## Requirements
 

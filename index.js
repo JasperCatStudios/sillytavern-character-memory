@@ -160,7 +160,122 @@ Output ONLY <memory> blocks (or NO_NEW_MEMORIES). No headers, no commentary, no 
 const EXTRACTION_SOURCE = {
     MAIN_LLM: 'main_llm',
     WEBLLM: 'webllm',
-    NANOGPT: 'nanogpt',
+    PROVIDER: 'provider',
+};
+
+const PROVIDER_PRESETS = {
+    openai: {
+        name: 'OpenAI',
+        baseUrl: 'https://api.openai.com/v1',
+        authStyle: 'bearer',
+        modelsEndpoint: 'standard',
+        requiresApiKey: true,
+        extraHeaders: {},
+        defaultModel: 'gpt-4.1-nano',
+        helpUrl: 'https://platform.openai.com/api-keys',
+    },
+    anthropic: {
+        name: 'Anthropic',
+        baseUrl: 'https://api.anthropic.com/v1',
+        authStyle: 'x-api-key',
+        modelsEndpoint: 'none',
+        requiresApiKey: true,
+        extraHeaders: { 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
+        defaultModel: 'claude-sonnet-4-5-20250929',
+        helpUrl: 'https://console.anthropic.com/settings/keys',
+        isAnthropic: true,
+    },
+    openrouter: {
+        name: 'OpenRouter',
+        baseUrl: 'https://openrouter.ai/api/v1',
+        authStyle: 'bearer',
+        modelsEndpoint: 'standard',
+        requiresApiKey: true,
+        extraHeaders: { 'HTTP-Referer': 'https://sillytavern.app', 'X-Title': 'SillyTavern CharMemory' },
+        defaultModel: '',
+        helpUrl: 'https://openrouter.ai/keys',
+    },
+    groq: {
+        name: 'Groq',
+        baseUrl: 'https://api.groq.com/openai/v1',
+        authStyle: 'bearer',
+        modelsEndpoint: 'standard',
+        requiresApiKey: true,
+        extraHeaders: {},
+        defaultModel: 'llama-3.3-70b-versatile',
+        helpUrl: 'https://console.groq.com/keys',
+    },
+    deepseek: {
+        name: 'DeepSeek',
+        baseUrl: 'https://api.deepseek.com',
+        authStyle: 'bearer',
+        modelsEndpoint: 'standard',
+        requiresApiKey: true,
+        extraHeaders: {},
+        defaultModel: 'deepseek-chat',
+        helpUrl: 'https://platform.deepseek.com/api_keys',
+    },
+    mistral: {
+        name: 'Mistral',
+        baseUrl: 'https://api.mistral.ai/v1',
+        authStyle: 'bearer',
+        modelsEndpoint: 'standard',
+        requiresApiKey: true,
+        extraHeaders: {},
+        defaultModel: 'mistral-small-latest',
+        helpUrl: 'https://console.mistral.ai/api-keys',
+    },
+    xai: {
+        name: 'xAI (Grok)',
+        baseUrl: 'https://api.x.ai/v1',
+        authStyle: 'bearer',
+        modelsEndpoint: 'standard',
+        requiresApiKey: true,
+        extraHeaders: {},
+        defaultModel: 'grok-3-mini-fast',
+        helpUrl: 'https://console.x.ai',
+    },
+    nanogpt: {
+        name: 'NanoGPT',
+        baseUrl: 'https://nano-gpt.com/api/v1',
+        authStyle: 'bearer',
+        modelsEndpoint: 'custom',
+        requiresApiKey: true,
+        extraHeaders: {},
+        defaultModel: '',
+        helpUrl: 'https://nano-gpt.com/api',
+    },
+    ollama: {
+        name: 'Ollama (local)',
+        baseUrl: 'http://localhost:11434/v1',
+        authStyle: 'none',
+        modelsEndpoint: 'standard',
+        requiresApiKey: false,
+        extraHeaders: {},
+        defaultModel: '',
+        helpUrl: 'https://ollama.com',
+    },
+    pollinations: {
+        name: 'Pollinations (free)',
+        baseUrl: 'https://text.pollinations.ai/openai',
+        authStyle: 'none',
+        modelsEndpoint: 'none',
+        requiresApiKey: false,
+        extraHeaders: {},
+        defaultModel: 'openai',
+        helpUrl: 'https://pollinations.ai',
+    },
+    custom: {
+        name: 'Custom (OpenAI-compatible)',
+        baseUrl: '',
+        authStyle: 'bearer',
+        modelsEndpoint: 'standard',
+        requiresApiKey: true,
+        extraHeaders: {},
+        defaultModel: '',
+        helpUrl: '',
+        allowCustomUrl: true,
+    },
 };
 
 const defaultSettings = {
@@ -172,6 +287,9 @@ const defaultSettings = {
     source: EXTRACTION_SOURCE.MAIN_LLM,
     fileName: DEFAULT_FILE_NAME,
     perChat: false,
+    selectedProvider: 'openrouter',
+    providers: {},
+    // Legacy NanoGPT fields kept for migration
     nanogptApiKey: '',
     nanogptModel: '',
     nanogptSystemPrompt: '',
@@ -182,6 +300,26 @@ const defaultSettings = {
     minCooldownMinutes: 10,
     verboseLogging: false,
 };
+
+/**
+ * Get (or lazily initialize) provider-specific settings.
+ * @param {string} providerKey Key from PROVIDER_PRESETS.
+ * @returns {{apiKey: string, model: string, systemPrompt: string, customBaseUrl: string, nanogptFilterSubscription?: boolean, nanogptFilterOpenSource?: boolean, nanogptFilterRoleplay?: boolean, nanogptFilterReasoning?: boolean}}
+ */
+function getProviderSettings(providerKey) {
+    const s = extension_settings[MODULE_NAME];
+    if (!s.providers) s.providers = {};
+    if (!s.providers[providerKey]) {
+        const preset = PROVIDER_PRESETS[providerKey];
+        s.providers[providerKey] = {
+            apiKey: '',
+            model: preset?.defaultModel || '',
+            systemPrompt: '',
+            customBaseUrl: '',
+        };
+    }
+    return s.providers[providerKey];
+}
 
 // ============ Structured Memory Helpers ============
 
@@ -331,25 +469,88 @@ let lastDiagnostics = {
 let diagnosticsHistory = [];
 
 /**
- * Toggle NanoGPT settings panel visibility and load models if needed.
+ * Toggle provider settings panel visibility.
  * @param {string} source Current extraction source value.
  */
-function toggleNanoGptSettings(source) {
-    const isNanoGpt = source === EXTRACTION_SOURCE.NANOGPT;
-    $('#charMemory_nanogptSettings').toggle(isNanoGpt);
-    if (isNanoGpt) {
-        populateNanoGptModels();
+function toggleProviderSettings(source) {
+    const isProvider = source === EXTRACTION_SOURCE.PROVIDER;
+    $('#charMemory_providerSettings').toggle(isProvider);
+    if (isProvider) {
+        updateProviderUI();
     }
 }
 
 /**
+ * Populate the provider preset dropdown from PROVIDER_PRESETS.
+ */
+function populateProviderDropdown() {
+    const $select = $('#charMemory_providerSelect');
+    $select.empty();
+    for (const [key, preset] of Object.entries(PROVIDER_PRESETS)) {
+        $select.append(`<option value="${escapeHtml(key)}">${escapeHtml(preset.name)}</option>`);
+    }
+    $select.val(extension_settings[MODULE_NAME].selectedProvider || 'openrouter');
+}
+
+/**
+ * Update the provider panel UI based on the currently selected preset.
+ * Shows/hides rows and populates fields from the provider's saved settings.
+ */
+function updateProviderUI() {
+    const providerKey = extension_settings[MODULE_NAME].selectedProvider;
+    const preset = PROVIDER_PRESETS[providerKey];
+    if (!preset) return;
+
+    const providerSettings = getProviderSettings(providerKey);
+
+    // API Key row: show/hide based on requiresApiKey
+    $('#charMemory_providerApiKeyRow').toggle(!!preset.requiresApiKey);
+    $('#charMemory_providerApiKey').val(providerSettings.apiKey || '');
+
+    // Help link
+    if (preset.helpUrl) {
+        $('#charMemory_providerHelpLink').attr('href', preset.helpUrl).show();
+    } else {
+        $('#charMemory_providerHelpLink').hide();
+    }
+
+    // Custom base URL row
+    $('#charMemory_providerBaseUrlRow').toggle(!!preset.allowCustomUrl);
+    $('#charMemory_providerBaseUrl').val(providerSettings.customBaseUrl || '');
+
+    // Model: dropdown vs text input
+    const useDropdown = preset.modelsEndpoint === 'standard' || preset.modelsEndpoint === 'custom';
+    $('#charMemory_providerModelDropdownRow').toggle(useDropdown);
+    $('#charMemory_providerModelInputRow').toggle(!useDropdown);
+
+    // NanoGPT-specific filters
+    const isNanoGpt = providerKey === 'nanogpt';
+    $('#charMemory_nanogptFilters').toggle(isNanoGpt);
+    if (isNanoGpt) {
+        $('#charMemory_nanogptFilterSub').prop('checked', !!providerSettings.nanogptFilterSubscription);
+        $('#charMemory_nanogptFilterOS').prop('checked', !!providerSettings.nanogptFilterOpenSource);
+        $('#charMemory_nanogptFilterRP').prop('checked', !!providerSettings.nanogptFilterRoleplay);
+        $('#charMemory_nanogptFilterReasoning').prop('checked', !!providerSettings.nanogptFilterReasoning);
+    }
+
+    if (useDropdown) {
+        populateProviderModels(providerKey);
+    } else {
+        $('#charMemory_providerModelInput').val(providerSettings.model || '');
+    }
+
+    // System prompt
+    $('#charMemory_providerSystemPrompt').val(providerSettings.systemPrompt || '');
+}
+
+/**
  * Filter NanoGPT models based on active filter toggles.
- * When multiple filters are active, their intersection is applied.
  * @param {object[]} models Full model list.
+ * @param {object} providerSettings NanoGPT provider settings.
  * @returns {object[]} Filtered model list.
  */
-function getFilteredNanoGptModels(models) {
-    const s = extension_settings[MODULE_NAME];
+function getFilteredNanoGptModels(models, providerSettings) {
+    const s = providerSettings;
     const hasAnyFilter = s.nanogptFilterSubscription || s.nanogptFilterOpenSource || s.nanogptFilterRoleplay || s.nanogptFilterReasoning;
     if (!hasAnyFilter) return models;
 
@@ -363,72 +564,93 @@ function getFilteredNanoGptModels(models) {
 }
 
 /**
- * Populate the NanoGPT model dropdown.
- * @param {boolean} forceRebuild If true, rebuild dropdown using cached data (skip the "already populated" check).
+ * Populate the model dropdown for a provider.
+ * @param {string} providerKey Provider key.
+ * @param {boolean} [forceRefresh=false] Force refresh from API.
  */
-async function populateNanoGptModels(forceRebuild = false) {
-    const $select = $('#charMemory_nanogptModel');
-    // Skip if already populated (beyond the default option), unless forced
-    if (!forceRebuild && $select.find('option').length > 1 && !$select.data('needsRefresh')) return;
+async function populateProviderModels(providerKey, forceRefresh = false) {
+    const $select = $('#charMemory_providerModel');
+    const preset = PROVIDER_PRESETS[providerKey];
+    if (!preset) return;
+
+    if (forceRefresh) {
+        clearModelCache(providerKey);
+    }
+
+    const providerSettings = getProviderSettings(providerKey);
 
     try {
-        const models = await fetchNanoGptModels();
-        const filtered = getFilteredNanoGptModels(models);
+        if (providerKey === 'nanogpt') {
+            // NanoGPT uses its own rich model list with optgroups
+            const models = await fetchNanoGptModels();
+            const filtered = getFilteredNanoGptModels(models, providerSettings);
+            const currentVal = $select.val() || providerSettings.model;
 
-        // Remember current selection before rebuilding
-        const currentVal = $select.val() || extension_settings[MODULE_NAME].nanogptModel;
+            $select.empty().append('<option value="">-- Select model --</option>');
 
-        $select.empty().append('<option value="">-- Select model --</option>');
-
-        // Group by provider
-        const byProvider = {};
-        for (const m of filtered) {
-            if (!byProvider[m.provider]) byProvider[m.provider] = [];
-            byProvider[m.provider].push(m);
-        }
-
-        for (const [provider, providerModels] of Object.entries(byProvider)) {
-            const $group = $(`<optgroup label="${escapeHtml(provider)}">`);
-            for (const m of providerModels) {
-                const subTag = m.subscription ? ' [Sub]' : '';
-                $group.append(`<option value="${escapeHtml(m.id)}">${escapeHtml(m.name)} (${m.cost})${subTag}</option>`);
+            const byProvider = {};
+            for (const m of filtered) {
+                if (!byProvider[m.provider]) byProvider[m.provider] = [];
+                byProvider[m.provider].push(m);
             }
-            $select.append($group);
-        }
 
-        // Preserve selected model if still in filtered list; otherwise reset
-        if (currentVal && filtered.some(m => m.id === currentVal)) {
-            $select.val(currentVal);
-            updateNanoGptModelInfo(models, currentVal);
+            for (const [provider, providerModels] of Object.entries(byProvider)) {
+                const $group = $(`<optgroup label="${escapeHtml(provider)}">`);
+                for (const m of providerModels) {
+                    const subTag = m.subscription ? ' [Sub]' : '';
+                    $group.append(`<option value="${escapeHtml(m.id)}">${escapeHtml(m.name)} (${m.cost})${subTag}</option>`);
+                }
+                $select.append($group);
+            }
+
+            if (currentVal && filtered.some(m => m.id === currentVal)) {
+                $select.val(currentVal);
+                updateProviderModelInfo(models, currentVal);
+            } else {
+                $select.val('');
+                providerSettings.model = '';
+                saveSettingsDebounced();
+                $('#charMemory_providerModelInfo').text('');
+            }
         } else {
-            $select.val('');
-            extension_settings[MODULE_NAME].nanogptModel = '';
-            saveSettingsDebounced();
-            $('#charMemory_nanogptModelInfo').text('');
-        }
+            // Standard OpenAI-compatible model list
+            const models = await fetchProviderModels(providerKey);
+            const currentVal = $select.val() || providerSettings.model;
 
-        $select.data('needsRefresh', false);
+            $select.empty().append('<option value="">-- Select model --</option>');
+            for (const m of models) {
+                $select.append(`<option value="${escapeHtml(m.id)}">${escapeHtml(m.name)}</option>`);
+            }
+
+            if (currentVal && models.some(m => m.id === currentVal)) {
+                $select.val(currentVal);
+            } else if (providerSettings.model) {
+                // Model may not be in list yet (e.g. typed manually before)
+                $select.val('');
+            }
+            $('#charMemory_providerModelInfo').text('');
+        }
     } catch (err) {
-        console.error(LOG_PREFIX, 'Failed to fetch NanoGPT models:', err);
-        toastr.error('Failed to load NanoGPT models. Check console.', 'CharMemory');
+        console.error(LOG_PREFIX, `Failed to fetch models for ${preset.name}:`, err);
+        toastr.error(`Failed to load models from ${preset.name}. Check console.`, 'CharMemory');
     }
 }
 
 /**
- * Update the model info text below the dropdown.
- * @param {{id: string, name: string, cost: string, provider: string, maxInputTokens: number, maxOutputTokens: number}[]} models
- * @param {string} modelId
+ * Update the model info text below the dropdown (NanoGPT-specific).
+ * @param {object[]} models NanoGPT model list.
+ * @param {string} modelId Selected model ID.
  */
-function updateNanoGptModelInfo(models, modelId) {
+function updateProviderModelInfo(models, modelId) {
     const info = models.find(m => m.id === modelId);
     if (info) {
         const parts = [`Provider: ${info.provider}`, `Cost: ${info.cost}`];
         if (info.maxInputTokens) parts.push(`Input: ${info.maxInputTokens.toLocaleString()} tokens`);
         if (info.maxOutputTokens) parts.push(`Output: ${info.maxOutputTokens.toLocaleString()} tokens`);
         parts.push(info.subscription ? 'Included in subscription' : 'Pay-per-use');
-        $('#charMemory_nanogptModelInfo').text(parts.join(' | '));
+        $('#charMemory_providerModelInfo').text(parts.join(' | '));
     } else {
-        $('#charMemory_nanogptModelInfo').text('');
+        $('#charMemory_providerModelInfo').text('');
     }
 }
 
@@ -463,6 +685,27 @@ function loadSettings() {
         saveSettingsDebounced();
     }
 
+    // Migrate NanoGPT source → provider system
+    if (extension_settings[MODULE_NAME].source === 'nanogpt') {
+        extension_settings[MODULE_NAME].source = EXTRACTION_SOURCE.PROVIDER;
+        extension_settings[MODULE_NAME].selectedProvider = 'nanogpt';
+        const nanoSettings = getProviderSettings('nanogpt');
+        if (extension_settings[MODULE_NAME].nanogptApiKey) {
+            nanoSettings.apiKey = extension_settings[MODULE_NAME].nanogptApiKey;
+        }
+        if (extension_settings[MODULE_NAME].nanogptModel) {
+            nanoSettings.model = extension_settings[MODULE_NAME].nanogptModel;
+        }
+        if (extension_settings[MODULE_NAME].nanogptSystemPrompt) {
+            nanoSettings.systemPrompt = extension_settings[MODULE_NAME].nanogptSystemPrompt;
+        }
+        nanoSettings.nanogptFilterSubscription = !!extension_settings[MODULE_NAME].nanogptFilterSubscription;
+        nanoSettings.nanogptFilterOpenSource = !!extension_settings[MODULE_NAME].nanogptFilterOpenSource;
+        nanoSettings.nanogptFilterRoleplay = !!extension_settings[MODULE_NAME].nanogptFilterRoleplay;
+        nanoSettings.nanogptFilterReasoning = !!extension_settings[MODULE_NAME].nanogptFilterReasoning;
+        saveSettingsDebounced();
+    }
+
     // Bind UI elements to settings
     $('#charMemory_enabled').prop('checked', extension_settings[MODULE_NAME].enabled);
     $('#charMemory_perChat').prop('checked', extension_settings[MODULE_NAME].perChat);
@@ -477,16 +720,11 @@ function loadSettings() {
     $('#charMemory_extractionPrompt').val(extension_settings[MODULE_NAME].extractionPrompt);
     $('#charMemory_source').val(extension_settings[MODULE_NAME].source);
     $('#charMemory_fileName').val(extension_settings[MODULE_NAME].fileName);
-
-    // NanoGPT settings
-    $('#charMemory_nanogptApiKey').val(extension_settings[MODULE_NAME].nanogptApiKey);
-    $('#charMemory_nanogptSystemPrompt').val(extension_settings[MODULE_NAME].nanogptSystemPrompt);
-    $('#charMemory_nanogptFilterSub').prop('checked', extension_settings[MODULE_NAME].nanogptFilterSubscription);
-    $('#charMemory_nanogptFilterOS').prop('checked', extension_settings[MODULE_NAME].nanogptFilterOpenSource);
-    $('#charMemory_nanogptFilterRP').prop('checked', extension_settings[MODULE_NAME].nanogptFilterRoleplay);
-    $('#charMemory_nanogptFilterReasoning').prop('checked', extension_settings[MODULE_NAME].nanogptFilterReasoning);
     $('#charMemory_verboseLog').prop('checked', extension_settings[MODULE_NAME].verboseLogging);
-    toggleNanoGptSettings(extension_settings[MODULE_NAME].source);
+
+    // Provider settings
+    populateProviderDropdown();
+    toggleProviderSettings(extension_settings[MODULE_NAME].source);
 
     updateStatusDisplay();
 }
@@ -737,9 +975,10 @@ async function fetchChatMessages(fileName) {
     };
 }
 
-// ============ NanoGPT API Helpers ============
+// ============ Provider API Helpers ============
 
 let cachedNanoGptModels = null;
+const modelCache = {};
 
 /**
  * Fetch available text models from NanoGPT, with subscription status.
@@ -800,28 +1039,49 @@ async function fetchNanoGptModels() {
 }
 
 /**
- * Generate a response using NanoGPT's OpenAI-compatible API.
+ * Build auth headers for a provider preset.
+ * @param {object} preset Provider preset from PROVIDER_PRESETS.
+ * @param {string} apiKey API key for the provider.
+ * @returns {object} Headers object.
+ */
+function buildProviderHeaders(preset, apiKey) {
+    const headers = { 'Content-Type': 'application/json', ...preset.extraHeaders };
+    if (preset.authStyle === 'bearer' && apiKey) {
+        headers['Authorization'] = `Bearer ${apiKey}`;
+    } else if (preset.authStyle === 'x-api-key' && apiKey) {
+        headers['x-api-key'] = apiKey;
+    }
+    return headers;
+}
+
+/**
+ * Resolve the base URL for a provider, considering custom URLs.
+ * @param {object} preset Provider preset.
+ * @param {object} providerSettings Provider-specific settings.
+ * @returns {string} Base URL.
+ */
+function resolveBaseUrl(preset, providerSettings) {
+    if (preset.allowCustomUrl && providerSettings.customBaseUrl) {
+        return providerSettings.customBaseUrl.replace(/\/+$/, '');
+    }
+    return preset.baseUrl;
+}
+
+/**
+ * Generate a response using an OpenAI-compatible API.
+ * @param {string} baseUrl Base URL for the API.
+ * @param {string} apiKey API key.
+ * @param {string} model Model identifier.
  * @param {{role: string, content: string}[]} messages Chat messages.
  * @param {number} maxTokens Max tokens for response.
+ * @param {object} preset Provider preset.
  * @returns {Promise<string>} The assistant's response content.
  */
-async function generateNanoGptResponse(messages, maxTokens) {
-    const apiKey = extension_settings[MODULE_NAME].nanogptApiKey;
-    const model = extension_settings[MODULE_NAME].nanogptModel;
-
-    if (!apiKey) {
-        throw new Error('NanoGPT API key is not set. Configure it in Character Memory settings.');
-    }
-    if (!model) {
-        throw new Error('NanoGPT model is not selected. Choose a model in Character Memory settings.');
-    }
-
-    const response = await fetch('https://nano-gpt.com/api/v1/chat/completions', {
+async function generateOpenAICompatibleResponse(baseUrl, apiKey, model, messages, maxTokens, preset) {
+    const headers = buildProviderHeaders(preset, apiKey);
+    const response = await fetch(`${baseUrl}/chat/completions`, {
         method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${apiKey}`,
-        },
+        headers,
         body: JSON.stringify({
             model,
             messages,
@@ -831,7 +1091,8 @@ async function generateNanoGptResponse(messages, maxTokens) {
     });
 
     if (!response.ok) {
-        let errorMsg = `NanoGPT API error: ${response.status}`;
+        const presetName = preset.name || 'API';
+        let errorMsg = `${presetName} error: ${response.status}`;
         try {
             const errorBody = await response.json();
             errorMsg += ` — ${errorBody.error?.message || JSON.stringify(errorBody)}`;
@@ -844,46 +1105,219 @@ async function generateNanoGptResponse(messages, maxTokens) {
 }
 
 /**
- * Test the NanoGPT API connection with a minimal request.
+ * Generate a response using the Anthropic native Messages API.
+ * @param {string} baseUrl Base URL for the API.
+ * @param {string} apiKey API key.
+ * @param {string} model Model identifier.
+ * @param {{role: string, content: string}[]} messages Chat messages (OpenAI format).
+ * @param {number} maxTokens Max tokens for response.
+ * @param {object} preset Provider preset.
+ * @returns {Promise<string>} The assistant's response content.
  */
-async function testNanoGptConnection() {
-    const apiKey = extension_settings[MODULE_NAME].nanogptApiKey;
-    if (!apiKey) {
+async function generateAnthropicResponse(baseUrl, apiKey, model, messages, maxTokens, preset) {
+    const headers = buildProviderHeaders(preset, apiKey);
+
+    // Extract system message and convert to Anthropic format
+    let system = '';
+    const anthropicMessages = [];
+    for (const msg of messages) {
+        if (msg.role === 'system') {
+            system += (system ? '\n' : '') + msg.content;
+        } else {
+            anthropicMessages.push({ role: msg.role, content: msg.content });
+        }
+    }
+
+    // Anthropic requires at least one user message
+    if (anthropicMessages.length === 0 || anthropicMessages[0].role !== 'user') {
+        anthropicMessages.unshift({ role: 'user', content: 'Please proceed.' });
+    }
+
+    const body = {
+        model,
+        max_tokens: maxTokens,
+        messages: anthropicMessages,
+    };
+    if (system) body.system = system;
+
+    const response = await fetch(`${baseUrl}/messages`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(body),
+    });
+
+    if (!response.ok) {
+        let errorMsg = `Anthropic error: ${response.status}`;
+        try {
+            const errorBody = await response.json();
+            errorMsg += ` — ${errorBody.error?.message || JSON.stringify(errorBody)}`;
+        } catch { /* ignore parse error */ }
+        throw new Error(errorMsg);
+    }
+
+    const data = await response.json();
+    return (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('') || '';
+}
+
+/**
+ * Route a request to the correct provider API.
+ * @param {{role: string, content: string}[]} messages Chat messages.
+ * @param {number} maxTokens Max tokens for response.
+ * @returns {Promise<string>} The assistant's response content.
+ */
+async function generateProviderResponse(messages, maxTokens) {
+    const providerKey = extension_settings[MODULE_NAME].selectedProvider;
+    const preset = PROVIDER_PRESETS[providerKey];
+    if (!preset) throw new Error(`Unknown provider: ${providerKey}`);
+
+    const providerSettings = getProviderSettings(providerKey);
+    const apiKey = providerSettings.apiKey;
+    const model = providerSettings.model;
+    const baseUrl = resolveBaseUrl(preset, providerSettings);
+
+    if (preset.requiresApiKey && !apiKey) {
+        throw new Error(`${preset.name} API key is not set. Configure it in Character Memory settings.`);
+    }
+    if (!model) {
+        throw new Error(`${preset.name} model is not selected. Choose a model in Character Memory settings.`);
+    }
+    if (preset.allowCustomUrl && !baseUrl) {
+        throw new Error('Custom base URL is not set. Configure it in Character Memory settings.');
+    }
+
+    if (preset.isAnthropic) {
+        return generateAnthropicResponse(baseUrl, apiKey, model, messages, maxTokens, preset);
+    }
+    return generateOpenAICompatibleResponse(baseUrl, apiKey, model, messages, maxTokens, preset);
+}
+
+/**
+ * Get a human-readable label for the current source.
+ * @returns {string}
+ */
+function getSourceLabel() {
+    const source = extension_settings[MODULE_NAME].source;
+    if (source === EXTRACTION_SOURCE.WEBLLM) return 'WebLLM';
+    if (source === EXTRACTION_SOURCE.PROVIDER) {
+        const key = extension_settings[MODULE_NAME].selectedProvider;
+        return PROVIDER_PRESETS[key]?.name || key;
+    }
+    return 'main LLM';
+}
+
+/**
+ * Unified LLM dispatch: routes to Provider API, WebLLM, or Main LLM.
+ * @param {string} userPrompt The user prompt to send.
+ * @param {number} maxTokens Max tokens for the response.
+ * @param {string} [defaultSystemPrompt='You are a memory extraction assistant.'] Fallback system prompt.
+ * @returns {Promise<string>} The LLM response.
+ */
+async function callLLM(userPrompt, maxTokens, defaultSystemPrompt = 'You are a memory extraction assistant.') {
+    const source = extension_settings[MODULE_NAME].source;
+    if (source === EXTRACTION_SOURCE.PROVIDER) {
+        const providerSettings = getProviderSettings(extension_settings[MODULE_NAME].selectedProvider);
+        const systemPrompt = providerSettings.systemPrompt || defaultSystemPrompt;
+        return generateProviderResponse(
+            [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }],
+            maxTokens,
+        );
+    }
+    if (source === EXTRACTION_SOURCE.WEBLLM) {
+        if (!isWebLlmSupported()) throw new Error('WebLLM is not available in this browser.');
+        return generateWebLlmChatPrompt(
+            [{ role: 'system', content: defaultSystemPrompt }, { role: 'user', content: userPrompt }],
+            { max_tokens: maxTokens },
+        );
+    }
+    return generateQuietPrompt({ quietPrompt: userPrompt, skipWIAN: true, responseLength: maxTokens });
+}
+
+/**
+ * Fetch models for a provider (standard OpenAI-compatible /models endpoint).
+ * @param {string} providerKey Provider key from PROVIDER_PRESETS.
+ * @returns {Promise<{id: string, name: string}[]>} Model list.
+ */
+async function fetchProviderModels(providerKey) {
+    if (modelCache[providerKey]) return modelCache[providerKey];
+
+    const preset = PROVIDER_PRESETS[providerKey];
+    if (!preset) return [];
+
+    if (preset.modelsEndpoint === 'none') return [];
+    if (preset.modelsEndpoint === 'custom') {
+        // NanoGPT uses its own rich model fetcher
+        const models = await fetchNanoGptModels();
+        return models.map(m => ({ id: m.id, name: m.name, _raw: m }));
+    }
+
+    const providerSettings = getProviderSettings(providerKey);
+    const baseUrl = resolveBaseUrl(preset, providerSettings);
+    if (!baseUrl) return [];
+
+    const headers = buildProviderHeaders(preset, providerSettings.apiKey);
+    delete headers['Content-Type']; // GET request
+
+    const response = await fetch(`${baseUrl}/models`, { headers });
+    if (!response.ok) {
+        throw new Error(`Failed to fetch models from ${preset.name}: ${response.status}`);
+    }
+
+    const data = await response.json();
+    const rawModels = data?.data || [];
+    const models = rawModels
+        .map(m => ({ id: m.id, name: m.id }))
+        .sort((a, b) => a.name.localeCompare(b.name));
+
+    modelCache[providerKey] = models;
+    return models;
+}
+
+/**
+ * Clear cached models for a provider.
+ * @param {string} providerKey Provider key.
+ */
+function clearModelCache(providerKey) {
+    delete modelCache[providerKey];
+    if (providerKey === 'nanogpt') {
+        cachedNanoGptModels = null;
+    }
+}
+
+/**
+ * Test the current provider's API connection with a minimal request.
+ */
+async function testProviderConnection() {
+    const providerKey = extension_settings[MODULE_NAME].selectedProvider;
+    const preset = PROVIDER_PRESETS[providerKey];
+    if (!preset) {
+        toastr.error('Unknown provider selected.', 'CharMemory');
+        return;
+    }
+
+    const providerSettings = getProviderSettings(providerKey);
+    if (preset.requiresApiKey && !providerSettings.apiKey) {
         toastr.error('Enter an API key first.', 'CharMemory');
         return;
     }
 
-    const $btn = $('#charMemory_nanogptTest');
+    const $btn = $('#charMemory_providerTest');
     $btn.prop('disabled', true);
 
     try {
-        const response = await fetch('https://nano-gpt.com/api/v1/chat/completions', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${apiKey}`,
-            },
-            body: JSON.stringify({
-                model: 'gpt-4.1-nano',
-                messages: [{ role: 'user', content: 'Say OK' }],
-                max_tokens: 3,
-            }),
-        });
+        const baseUrl = resolveBaseUrl(preset, providerSettings);
+        const testModel = providerSettings.model || preset.defaultModel || 'gpt-4.1-nano';
+        const testMessages = [{ role: 'user', content: 'Say OK' }];
 
-        if (!response.ok) {
-            let errorMsg = `HTTP ${response.status}`;
-            try {
-                const errorBody = await response.json();
-                errorMsg = errorBody.error?.message || errorMsg;
-            } catch { /* ignore */ }
-            toastr.error(errorMsg, 'CharMemory');
-            return;
+        if (preset.isAnthropic) {
+            await generateAnthropicResponse(baseUrl, providerSettings.apiKey, testModel, testMessages, 3, preset);
+        } else {
+            await generateOpenAICompatibleResponse(baseUrl, providerSettings.apiKey, testModel, testMessages, 3, preset);
         }
 
-        logActivity('NanoGPT connection test successful', 'success');
+        logActivity(`${preset.name} connection test successful`, 'success');
         toastr.success('Connection successful!', 'CharMemory');
     } catch (err) {
-        logActivity(`NanoGPT connection test failed: ${err.message}`, 'error');
+        logActivity(`${preset.name} connection test failed: ${err.message}`, 'error');
         toastr.error(err.message || 'Connection failed', 'CharMemory');
     } finally {
         $btn.prop('disabled', false);
@@ -1032,7 +1466,7 @@ async function extractMemories({
     const effectiveChatId = chatId || context.chatId || 'unknown';
 
     const source = extension_settings[MODULE_NAME].source;
-    const sourceLabel = source === EXTRACTION_SOURCE.WEBLLM ? 'WebLLM' : source === EXTRACTION_SOURCE.NANOGPT ? 'NanoGPT' : 'main LLM';
+    const sourceLabel = getSourceLabel();
 
     let totalMemories = 0;
     let chunksProcessed = 0;
@@ -1084,31 +1518,14 @@ async function extractMemories({
             logActivity(`Sending to ${sourceLabel}... waiting for response`);
             const llmStartTime = Date.now();
             let result;
-            if (source === EXTRACTION_SOURCE.NANOGPT) {
-                const systemPrompt = extension_settings[MODULE_NAME].nanogptSystemPrompt || 'You are a memory extraction assistant.';
-                const messages = [
-                    { role: 'system', content: systemPrompt },
-                    { role: 'user', content: prompt },
-                ];
-                result = await generateNanoGptResponse(messages, extension_settings[MODULE_NAME].responseLength);
-            } else if (source === EXTRACTION_SOURCE.WEBLLM) {
-                if (!isWebLlmSupported()) {
+            try {
+                result = await callLLM(prompt, extension_settings[MODULE_NAME].responseLength, 'You are a memory extraction assistant.');
+            } catch (llmErr) {
+                if (llmErr.message?.includes('WebLLM is not available')) {
                     toastr.error('WebLLM is not available in this browser.', 'CharMemory');
                     return { totalMemories, chunksProcessed, lastExtractedIndex: currentLastExtracted };
                 }
-                const messages = [
-                    { role: 'system', content: 'You are a memory extraction assistant.' },
-                    { role: 'user', content: prompt },
-                ];
-                result = await generateWebLlmChatPrompt(messages, {
-                    max_tokens: extension_settings[MODULE_NAME].responseLength,
-                });
-            } else {
-                result = await generateQuietPrompt({
-                    quietPrompt: prompt,
-                    skipWIAN: true,
-                    responseLength: extension_settings[MODULE_NAME].responseLength,
-                });
+                throw llmErr;
             }
 
             const llmElapsed = ((Date.now() - llmStartTime) / 1000).toFixed(1);
@@ -1217,27 +1634,11 @@ async function extractMemories({
                 }
 
                 try {
-                    let consolidateResult;
-                    if (source === EXTRACTION_SOURCE.NANOGPT) {
-                        const systemPrompt = extension_settings[MODULE_NAME].nanogptSystemPrompt || 'You are a memory consolidation assistant.';
-                        consolidateResult = await generateNanoGptResponse(
-                            [{ role: 'system', content: systemPrompt }, { role: 'user', content: consolidatePrompt }],
-                            extension_settings[MODULE_NAME].responseLength * 2,
-                        );
-                    } else if (source === EXTRACTION_SOURCE.WEBLLM) {
-                        if (isWebLlmSupported()) {
-                            consolidateResult = await generateWebLlmChatPrompt(
-                                [{ role: 'system', content: 'You are a memory consolidation assistant.' }, { role: 'user', content: consolidatePrompt }],
-                                { max_tokens: extension_settings[MODULE_NAME].responseLength * 2 },
-                            );
-                        }
-                    } else {
-                        consolidateResult = await generateQuietPrompt({
-                            quietPrompt: consolidatePrompt,
-                            skipWIAN: true,
-                            responseLength: extension_settings[MODULE_NAME].responseLength * 2,
-                        });
-                    }
+                    const consolidateResult = await callLLM(
+                        consolidatePrompt,
+                        extension_settings[MODULE_NAME].responseLength * 2,
+                        'You are a memory consolidation assistant.',
+                    );
 
                     let cleanConsolidate = removeReasoningFromString(consolidateResult || '').trim();
                     if (verbose && cleanConsolidate) {
@@ -1940,8 +2341,7 @@ async function consolidateMemories() {
 
     try {
         inApiCall = true;
-        const source = extension_settings[MODULE_NAME].source;
-        const sourceLabel = source === EXTRACTION_SOURCE.WEBLLM ? 'WebLLM' : source === EXTRACTION_SOURCE.NANOGPT ? 'NanoGPT' : 'main LLM';
+        const sourceLabel = getSourceLabel();
         toastr.info(`Consolidating ${beforeCount} memories via ${sourceLabel}...`, 'CharMemory', { timeOut: 3000 });
 
         const verbose = extension_settings[MODULE_NAME].verboseLogging;
@@ -1951,34 +2351,11 @@ async function consolidateMemories() {
 
         logActivity(`Sending consolidation to ${sourceLabel}... waiting for response`);
         const llmStartTime = Date.now();
-        let result;
-        if (source === EXTRACTION_SOURCE.NANOGPT) {
-            const customSysPrompt = extension_settings[MODULE_NAME].nanogptSystemPrompt;
-            const systemPrompt = customSysPrompt || 'You are a memory consolidation assistant.';
-            const messages = [
-                { role: 'system', content: systemPrompt },
-                { role: 'user', content: prompt },
-            ];
-            result = await generateNanoGptResponse(messages, extension_settings[MODULE_NAME].responseLength * 2);
-        } else if (source === EXTRACTION_SOURCE.WEBLLM) {
-            if (!isWebLlmSupported()) {
-                toastr.error('WebLLM is not available in this browser.', 'CharMemory');
-                return;
-            }
-            const messages = [
-                { role: 'system', content: 'You are a memory consolidation assistant.' },
-                { role: 'user', content: prompt },
-            ];
-            result = await generateWebLlmChatPrompt(messages, {
-                max_tokens: extension_settings[MODULE_NAME].responseLength * 2,
-            });
-        } else {
-            result = await generateQuietPrompt({
-                quietPrompt: prompt,
-                skipWIAN: true,
-                responseLength: extension_settings[MODULE_NAME].responseLength * 2,
-            });
-        }
+        const result = await callLLM(
+            prompt,
+            extension_settings[MODULE_NAME].responseLength * 2,
+            'You are a memory consolidation assistant.',
+        );
 
         const llmElapsed = ((Date.now() - llmStartTime) / 1000).toFixed(1);
         logActivity(`Consolidation response received from ${sourceLabel} in ${llmElapsed}s (${(result || '').length} chars)`);
@@ -2111,52 +2488,82 @@ function setupListeners() {
         const val = String($(this).val());
         extension_settings[MODULE_NAME].source = val;
         saveSettingsDebounced();
-        toggleNanoGptSettings(val);
+        toggleProviderSettings(val);
     });
 
-    $('#charMemory_nanogptApiKey').off('input').on('input', function () {
-        extension_settings[MODULE_NAME].nanogptApiKey = String($(this).val());
+    $('#charMemory_providerSelect').off('change').on('change', function () {
+        extension_settings[MODULE_NAME].selectedProvider = String($(this).val());
+        saveSettingsDebounced();
+        updateProviderUI();
+    });
+
+    $('#charMemory_providerApiKey').off('input').on('input', function () {
+        const providerSettings = getProviderSettings(extension_settings[MODULE_NAME].selectedProvider);
+        providerSettings.apiKey = String($(this).val());
         saveSettingsDebounced();
     });
 
-    $('#charMemory_nanogptModel').off('change').on('change', async function () {
+    $('#charMemory_providerModel').off('change').on('change', async function () {
         const val = String($(this).val());
-        extension_settings[MODULE_NAME].nanogptModel = val;
+        const providerKey = extension_settings[MODULE_NAME].selectedProvider;
+        const providerSettings = getProviderSettings(providerKey);
+        providerSettings.model = val;
         saveSettingsDebounced();
-        if (cachedNanoGptModels) {
-            updateNanoGptModelInfo(cachedNanoGptModels, val);
+        if (providerKey === 'nanogpt' && cachedNanoGptModels) {
+            updateProviderModelInfo(cachedNanoGptModels, val);
         }
     });
 
-    $('#charMemory_nanogptSystemPrompt').off('input').on('input', function () {
-        extension_settings[MODULE_NAME].nanogptSystemPrompt = String($(this).val());
+    $('#charMemory_providerModelInput').off('input').on('input', function () {
+        const providerSettings = getProviderSettings(extension_settings[MODULE_NAME].selectedProvider);
+        providerSettings.model = String($(this).val());
         saveSettingsDebounced();
     });
 
-    $('#charMemory_nanogptTest').off('click').on('click', () => testNanoGptConnection());
+    $('#charMemory_providerRefreshModels').off('click').on('click', function () {
+        populateProviderModels(extension_settings[MODULE_NAME].selectedProvider, true);
+    });
+
+    $('#charMemory_providerBaseUrl').off('input').on('input', function () {
+        const providerSettings = getProviderSettings(extension_settings[MODULE_NAME].selectedProvider);
+        providerSettings.customBaseUrl = String($(this).val());
+        saveSettingsDebounced();
+    });
+
+    $('#charMemory_providerSystemPrompt').off('input').on('input', function () {
+        const providerSettings = getProviderSettings(extension_settings[MODULE_NAME].selectedProvider);
+        providerSettings.systemPrompt = String($(this).val());
+        saveSettingsDebounced();
+    });
+
+    $('#charMemory_providerTest').off('click').on('click', () => testProviderConnection());
 
     $('#charMemory_nanogptFilterSub').off('change').on('change', function () {
-        extension_settings[MODULE_NAME].nanogptFilterSubscription = !!$(this).prop('checked');
+        const providerSettings = getProviderSettings('nanogpt');
+        providerSettings.nanogptFilterSubscription = !!$(this).prop('checked');
         saveSettingsDebounced();
-        populateNanoGptModels(true);
+        populateProviderModels('nanogpt', true);
     });
 
     $('#charMemory_nanogptFilterOS').off('change').on('change', function () {
-        extension_settings[MODULE_NAME].nanogptFilterOpenSource = !!$(this).prop('checked');
+        const providerSettings = getProviderSettings('nanogpt');
+        providerSettings.nanogptFilterOpenSource = !!$(this).prop('checked');
         saveSettingsDebounced();
-        populateNanoGptModels(true);
+        populateProviderModels('nanogpt', true);
     });
 
     $('#charMemory_nanogptFilterRP').off('change').on('change', function () {
-        extension_settings[MODULE_NAME].nanogptFilterRoleplay = !!$(this).prop('checked');
+        const providerSettings = getProviderSettings('nanogpt');
+        providerSettings.nanogptFilterRoleplay = !!$(this).prop('checked');
         saveSettingsDebounced();
-        populateNanoGptModels(true);
+        populateProviderModels('nanogpt', true);
     });
 
     $('#charMemory_nanogptFilterReasoning').off('change').on('change', function () {
-        extension_settings[MODULE_NAME].nanogptFilterReasoning = !!$(this).prop('checked');
+        const providerSettings = getProviderSettings('nanogpt');
+        providerSettings.nanogptFilterReasoning = !!$(this).prop('checked');
         saveSettingsDebounced();
-        populateNanoGptModels(true);
+        populateProviderModels('nanogpt', true);
     });
 
     $('#charMemory_verboseLog').off('change').on('change', function () {

@@ -56,33 +56,52 @@
                         <select id="charMemory_source" class="text_pole">
                             <option value="main_llm">Main LLM</option>
                             <option value="webllm">WebLLM (browser-local)</option>
-                            <option value="nanogpt">NanoGPT (direct API)</option>
+                            <option value="provider">API Provider</option>
                         </select>
 
-                        <div id="charMemory_nanogptSettings" style="display:none;">
+                        <div id="charMemory_providerSettings" style="display:none;">
                             <div class="charMemory_statusRow">
-                                <label><small>NanoGPT API Key</small></label>
+                                <label><small>Provider</small></label>
+                                <select id="charMemory_providerSelect" class="text_pole">
+                                </select>
+                            </div>
+                            <div class="charMemory_statusRow" id="charMemory_providerApiKeyRow">
+                                <label><small>API Key <a id="charMemory_providerHelpLink" href="#" target="_blank" style="font-size:0.85em;">(get key)</a></small></label>
                                 <div style="display:flex;gap:5px;align-items:center;">
-                                    <input type="password" id="charMemory_nanogptApiKey" class="text_pole" placeholder="Enter API key" style="flex:1;" />
-                                    <input type="button" id="charMemory_nanogptTest" class="menu_button" value="Test" title="Send a minimal request to verify your API key works" />
+                                    <input type="password" id="charMemory_providerApiKey" class="text_pole" placeholder="Enter API key" style="flex:1;" />
+                                    <input type="button" id="charMemory_providerTest" class="menu_button" value="Test" title="Send a minimal request to verify your API key works" />
                                 </div>
                             </div>
-                            <div class="charMemory_statusRow">
+                            <div class="charMemory_statusRow" id="charMemory_providerBaseUrlRow" style="display:none;">
+                                <label><small>Base URL</small></label>
+                                <input type="text" id="charMemory_providerBaseUrl" class="text_pole" placeholder="https://your-server.com/v1" />
+                            </div>
+                            <div class="charMemory_statusRow" id="charMemory_providerModelDropdownRow">
                                 <label><small>Model</small></label>
-                                <div class="charMemory_filterRow" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:4px;">
-                                    <label class="checkbox_label"><input type="checkbox" id="charMemory_nanogptFilterSub" /> <small>Subscription</small></label>
-                                    <label class="checkbox_label"><input type="checkbox" id="charMemory_nanogptFilterOS" /> <small>Open Source</small></label>
-                                    <label class="checkbox_label"><input type="checkbox" id="charMemory_nanogptFilterRP" /> <small>Roleplay</small></label>
-                                    <label class="checkbox_label"><input type="checkbox" id="charMemory_nanogptFilterReasoning" /> <small>Reasoning</small></label>
+                                <div id="charMemory_nanogptFilters" style="display:none;">
+                                    <div class="charMemory_filterRow" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:4px;">
+                                        <label class="checkbox_label"><input type="checkbox" id="charMemory_nanogptFilterSub" /> <small>Subscription</small></label>
+                                        <label class="checkbox_label"><input type="checkbox" id="charMemory_nanogptFilterOS" /> <small>Open Source</small></label>
+                                        <label class="checkbox_label"><input type="checkbox" id="charMemory_nanogptFilterRP" /> <small>Roleplay</small></label>
+                                        <label class="checkbox_label"><input type="checkbox" id="charMemory_nanogptFilterReasoning" /> <small>Reasoning</small></label>
+                                    </div>
                                 </div>
-                                <select id="charMemory_nanogptModel" class="text_pole">
-                                    <option value="">-- Select model --</option>
-                                </select>
-                                <small id="charMemory_nanogptModelInfo" class="charMemory_helperText"></small>
+                                <div style="display:flex;gap:5px;align-items:center;">
+                                    <select id="charMemory_providerModel" class="text_pole" style="flex:1;">
+                                        <option value="">-- Select model --</option>
+                                    </select>
+                                    <input type="button" id="charMemory_providerRefreshModels" class="menu_button" value="&#x21bb;" title="Refresh model list" />
+                                </div>
+                                <small id="charMemory_providerModelInfo" class="charMemory_helperText"></small>
+                            </div>
+                            <div class="charMemory_statusRow" id="charMemory_providerModelInputRow" style="display:none;">
+                                <label><small>Model ID</small></label>
+                                <input type="text" id="charMemory_providerModelInput" class="text_pole" placeholder="Enter model identifier" />
+                                <small class="charMemory_helperText">Enter the model ID manually (e.g. claude-sonnet-4-5-20250929).</small>
                             </div>
                             <div class="charMemory_statusRow">
                                 <label><small>System prompt (optional)</small></label>
-                                <textarea id="charMemory_nanogptSystemPrompt" class="text_pole" rows="3" placeholder="Override the default system prompt. Leave blank for default."></textarea>
+                                <textarea id="charMemory_providerSystemPrompt" class="text_pole" rows="3" placeholder="Override the default system prompt. Leave blank for default."></textarea>
                                 <small class="charMemory_helperText">Prepended to extraction/consolidation calls. Use for jailbreaks or custom instructions.</small>
                             </div>
                         </div>

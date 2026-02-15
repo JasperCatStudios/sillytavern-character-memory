@@ -1649,6 +1649,8 @@ async function consolidateMemories() {
     }
 
     const beforeCount = countMemories(memories);
+    logActivity(`Consolidation started: ${beforeCount} memories in ${memories.length} blocks`);
+
     let memoriesText = memories.map((b, i) =>
         `[Block ${i + 1}]\n${b.bullets.map(bullet => `- ${bullet}`).join('\n')}`,
     ).join('\n\n');
@@ -1670,6 +1672,13 @@ async function consolidateMemories() {
         const sourceLabel = source === EXTRACTION_SOURCE.WEBLLM ? 'WebLLM' : source === EXTRACTION_SOURCE.NANOGPT ? 'NanoGPT' : 'main LLM';
         toastr.info(`Consolidating ${beforeCount} memories via ${sourceLabel}...`, 'CharMemory', { timeOut: 3000 });
 
+        const verbose = extension_settings[MODULE_NAME].verboseLogging;
+        if (verbose) {
+            logActivity(`Consolidation prompt sent to ${sourceLabel} (${prompt.length} chars):\n${prompt}`);
+        }
+
+        logActivity(`Sending consolidation to ${sourceLabel}... waiting for response`);
+        const llmStartTime = Date.now();
         let result;
         if (source === EXTRACTION_SOURCE.NANOGPT) {
             const customSysPrompt = extension_settings[MODULE_NAME].nanogptSystemPrompt;
@@ -1699,10 +1708,17 @@ async function consolidateMemories() {
             });
         }
 
+        const llmElapsed = ((Date.now() - llmStartTime) / 1000).toFixed(1);
+        logActivity(`Consolidation response received from ${sourceLabel} in ${llmElapsed}s (${(result || '').length} chars)`);
+        if (verbose && result) {
+            logActivity(`Raw consolidation response:\n${result}`);
+        }
+
         let cleanResult = removeReasoningFromString(result);
         cleanResult = cleanResult.trim();
 
         if (!cleanResult) {
+            logActivity('Consolidation returned empty result', 'warning');
             toastr.warning('Consolidation returned empty result. Memories unchanged.', 'CharMemory');
             return;
         }
@@ -1729,6 +1745,7 @@ async function consolidateMemories() {
         const previewHtml = buildConsolidationPreview(memories, consolidated, beforeCount, afterCount);
         const confirmed = await callGenericPopup(previewHtml, POPUP_TYPE.CONFIRM, '', { wide: true, allowVerticalScrolling: true });
         if (!confirmed) {
+            logActivity('Consolidation cancelled by user');
             toastr.info('Consolidation cancelled.', 'CharMemory');
             return;
         }
@@ -1736,11 +1753,12 @@ async function consolidateMemories() {
         consolidationBackup = content;
         await writeMemories(serializeMemories(consolidated));
         $('#charMemory_undoConsolidate').prop('disabled', false);
+        logActivity(`Consolidation complete: ${beforeCount} → ${afterCount} memories`, 'success');
         toastr.success(`Consolidated ${beforeCount} → ${afterCount} memories.`, 'CharMemory');
-        console.log(LOG_PREFIX, `Consolidation: ${beforeCount} → ${afterCount}`);
         updateStatusDisplay();
     } catch (err) {
         console.error(LOG_PREFIX, 'Consolidation failed:', err);
+        logActivity(`Consolidation failed: ${err.message}`, 'error');
         toastr.error('Memory consolidation failed. Check console for details.', 'CharMemory');
     } finally {
         inApiCall = false;

@@ -79,7 +79,11 @@ function updateActivityLogDisplay() {
 
     const html = activityLog.map(entry => {
         const typeClass = `charMemory_log_${entry.type}`;
-        return `<div class="charMemory_logEntry ${typeClass}"><span class="charMemory_logTime">${entry.timestamp}</span> ${escapeHtml(entry.message)}</div>`;
+        const isVerbose = entry.message.includes('\n');
+        const msgHtml = isVerbose
+            ? `<details><summary>${escapeHtml(entry.message.split('\n')[0])}</summary><pre class="charMemory_logVerbose">${escapeHtml(entry.message)}</pre></details>`
+            : escapeHtml(entry.message);
+        return `<div class="charMemory_logEntry ${typeClass}"><span class="charMemory_logTime">${entry.timestamp}</span> ${msgHtml}</div>`;
     }).join('');
     $container.html(html);
 }

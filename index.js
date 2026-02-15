@@ -167,6 +167,7 @@ const defaultSettings = {
     nanogptFilterRoleplay: false,
     nanogptFilterReasoning: false,
     minCooldownMinutes: 10,
+    verboseLogging: false,
 };
 
 // ============ Structured Memory Helpers ============
@@ -442,6 +443,7 @@ function loadSettings() {
     $('#charMemory_nanogptFilterOS').prop('checked', extension_settings[MODULE_NAME].nanogptFilterOpenSource);
     $('#charMemory_nanogptFilterRP').prop('checked', extension_settings[MODULE_NAME].nanogptFilterRoleplay);
     $('#charMemory_nanogptFilterReasoning').prop('checked', extension_settings[MODULE_NAME].nanogptFilterReasoning);
+    $('#charMemory_verboseLog').prop('checked', extension_settings[MODULE_NAME].verboseLogging);
     toggleNanoGptSettings(extension_settings[MODULE_NAME].source);
 
     updateStatusDisplay();
@@ -1023,7 +1025,14 @@ async function extractMemories({
             const existingMemories = await readMemories();
             const prompt = buildExtractionPrompt(existingMemories, recentMessages);
 
+            const verbose = extension_settings[MODULE_NAME].verboseLogging;
+            if (verbose) {
+                logActivity(`Prompt sent to ${sourceLabel} (${prompt.length} chars):\n${prompt}`);
+            }
+
             // Call the appropriate LLM
+            logActivity(`Sending to ${sourceLabel}... waiting for response`);
+            const llmStartTime = Date.now();
             let result;
             if (source === EXTRACTION_SOURCE.NANOGPT) {
                 const systemPrompt = extension_settings[MODULE_NAME].nanogptSystemPrompt || 'You are a memory extraction assistant.';
@@ -1050,6 +1059,12 @@ async function extractMemories({
                     skipWIAN: true,
                     responseLength: extension_settings[MODULE_NAME].responseLength,
                 });
+            }
+
+            const llmElapsed = ((Date.now() - llmStartTime) / 1000).toFixed(1);
+            logActivity(`Response received from ${sourceLabel} in ${llmElapsed}s (${(result || '').length} chars)`);
+            if (verbose && result) {
+                logActivity(`Raw LLM response:\n${result}`);
             }
 
             // For active chats: verify context hasn't changed
@@ -1840,6 +1855,11 @@ function setupListeners() {
         extension_settings[MODULE_NAME].nanogptFilterReasoning = !!$(this).prop('checked');
         saveSettingsDebounced();
         populateNanoGptModels(true);
+    });
+
+    $('#charMemory_verboseLog').off('change').on('change', function () {
+        extension_settings[MODULE_NAME].verboseLogging = !!$(this).prop('checked');
+        saveSettingsDebounced();
     });
 
     $('#charMemory_extractionPrompt').off('input').on('input', function () {

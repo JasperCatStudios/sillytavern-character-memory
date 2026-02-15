@@ -202,6 +202,10 @@
                     <div class="charMemory_tabContent" id="charMemory_tabLog">
                         <div class="charMemory_buttonRow">
                             <input type="button" id="charMemory_clearLog" class="menu_button" value="Clear" title="Clear the activity log" />
+                            <label class="checkbox_label" for="charMemory_verboseLog" title="Show full LLM prompts and responses in the activity log">
+                                <input type="checkbox" id="charMemory_verboseLog" />
+                                <small>Verbose</small>
+                            </label>
                         </div>
                         <div id="charMemory_activityLog" class="charMemory_activityLog" style="max-height:300px;overflow-y:auto;font-size:0.85em;font-family:monospace;">
                             <div class="charMemory_diagEmpty">No activity yet.</div>

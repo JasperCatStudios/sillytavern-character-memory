@@ -60,7 +60,7 @@ const CONSOLIDATION_THRESHOLD = 10;
 
 // ============ Activity Log ============
 
-const MAX_LOG_ENTRIES = 50;
+const MAX_LOG_ENTRIES = 500;
 let activityLog = [];
 
 function logActivity(message, type = 'info') {
@@ -2262,6 +2262,21 @@ function setupListeners() {
     $('#charMemory_clearLog').off('click').on('click', function () {
         activityLog = [];
         updateActivityLogDisplay();
+    });
+
+    $('#charMemory_saveLog').off('click').on('click', function () {
+        if (activityLog.length === 0) {
+            toastr.info('Activity log is empty.', 'CharMemory');
+            return;
+        }
+        const lines = activityLog.map(e => `[${e.timestamp}] [${e.type}] ${e.message}`).join('\n');
+        const blob = new Blob([lines], { type: 'text/plain' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `charMemory-log-${new Date().toISOString().slice(0, 19).replace(/:/g, '')}.txt`;
+        a.click();
+        URL.revokeObjectURL(url);
     });
 
     // Batch Extract tab

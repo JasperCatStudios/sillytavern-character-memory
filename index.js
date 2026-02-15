@@ -1308,9 +1308,10 @@ function captureDiagnostics() {
     if (context.extensionPrompts) {
         for (const [key, value] of Object.entries(context.extensionPrompts)) {
             if (value && value.value) {
+                const maxLen = key === '4_vectors_data_bank' ? 2000 : 300;
                 lastDiagnostics.extensionPrompts[key] = {
                     label: key,
-                    content: typeof value.value === 'string' ? value.value.substring(0, 300) : String(value.value).substring(0, 300),
+                    content: typeof value.value === 'string' ? value.value.substring(0, maxLen) : String(value.value).substring(0, maxLen),
                     position: value.position,
                     depth: value.depth,
                 };
@@ -1460,6 +1461,19 @@ function updateDiagnosticsDisplay() {
             <div class="charMemory_diagCardTitle">Last extraction result</div>
             <div class="charMemory_diagCardContent">${escapeHtml(truncated)}</div>
         </div>`;
+    }
+    html += '</div>';
+
+    // Injected Memories — last generation
+    const dbPrompt = lastDiagnostics.extensionPrompts?.['4_vectors_data_bank'];
+    html += '<div class="charMemory_diagSection"><strong>Injected Memories — Last Generation</strong>';
+    if (dbPrompt && dbPrompt.content) {
+        const injectedText = dbPrompt.content;
+        html += `<div class="charMemory_diagCard">
+            <div class="charMemory_diagCardContent" style="white-space:pre-wrap;">${escapeHtml(injectedText)}${injectedText.length >= 2000 ? '...' : ''}</div>
+        </div>`;
+    } else {
+        html += '<div class="charMemory_diagEmpty">No memory chunks injected yet (generate a message first)</div>';
     }
     html += '</div>';
 

@@ -1474,29 +1474,29 @@ function updateDiagnosticsDisplay() {
     }
 
     if (dbPrompt && dbPrompt.content) {
-        // Parse <memory> blocks directly from the injected chunks
-        const injectedText = dbPrompt.content;
-        const injectedBlocks = parseMemories(injectedText);
+        // Extract bullet lines directly from injected text — works regardless of
+        // chunk boundaries splitting <memory> tags or Injection Template wrappers
+        const bullets = dbPrompt.content.split('\n')
+            .map(line => line.trim())
+            .filter(line => line.startsWith('- '))
+            .map(line => line.slice(2).trim())
+            .filter(Boolean);
 
         setTimeout(() => {
             const el = document.getElementById('charMemory_diagInjected');
             if (!el) return;
 
-            if (injectedBlocks.length > 0) {
-                const totalBullets = injectedBlocks.reduce((sum, b) => sum + b.bullets.length, 0);
-                let blockHtml = `<div class="charMemory_diagCard"><div class="charMemory_diagCardTitle">${totalBullets} memor${totalBullets === 1 ? 'y' : 'ies'} injected from ${injectedBlocks.length} block${injectedBlocks.length === 1 ? '' : 's'}</div>`;
-                for (const block of injectedBlocks) {
-                    for (const bullet of block.bullets) {
-                        blockHtml += `<div class="charMemory_diagCardContent">- ${escapeHtml(bullet)}</div>`;
-                    }
+            if (bullets.length > 0) {
+                let bulletHtml = `<div class="charMemory_diagCard"><div class="charMemory_diagCardTitle">${bullets.length} memor${bullets.length === 1 ? 'y' : 'ies'} injected</div>`;
+                for (const bullet of bullets) {
+                    bulletHtml += `<div class="charMemory_diagCardContent">- ${escapeHtml(bullet)}</div>`;
                 }
-                blockHtml += '</div>';
-                el.innerHTML = blockHtml;
+                bulletHtml += '</div>';
+                el.innerHTML = bulletHtml;
             } else {
-                // No <memory> blocks found — show raw text preview as fallback
-                const preview = injectedText.length > 800 ? injectedText.substring(0, 800) + '...' : injectedText;
+                const preview = dbPrompt.content.length > 800 ? dbPrompt.content.substring(0, 800) + '...' : dbPrompt.content;
                 let fallbackHtml = '<div class="charMemory_diagCard">';
-                fallbackHtml += '<div class="charMemory_diagCardTitle">Injected text (no structured memory blocks found):</div>';
+                fallbackHtml += '<div class="charMemory_diagCardTitle">Injected text (no memory bullets found):</div>';
                 fallbackHtml += `<div class="charMemory_diagCardContent" style="white-space:pre-wrap;">${escapeHtml(preview)}</div>`;
                 fallbackHtml += '</div>';
                 el.innerHTML = fallbackHtml;

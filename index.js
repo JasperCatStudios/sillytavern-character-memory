@@ -10,7 +10,7 @@ import {
     substituteParamsExtended,
     getRequestHeaders,
 } from '../../../../script.js';
-import { getStringHash } from '../../../utils.js';
+import { getStringHash, getCharaFilename } from '../../../utils.js';
 import {
     getContext,
     extension_settings,
@@ -27,6 +27,7 @@ import { SlashCommandParser } from '../../../slash-commands/SlashCommandParser.j
 import { SlashCommand } from '../../../slash-commands/SlashCommand.js';
 import { removeReasoningFromString } from '../../../reasoning.js';
 import { callGenericPopup, POPUP_TYPE } from '../../../popup.js';
+import { world_info, loadWorldInfo } from '../../../world-info.js';
 import { isWebLlmSupported, generateWebLlmChatPrompt } from '../../shared.js';
 
 const MODULE_NAME = 'charMemory';
@@ -1355,6 +1356,45 @@ async function checkVectorizationStatus(fileUrl) {
     }
 }
 
+/**
+ * Fetch lorebooks bound to the current character.
+ * @returns {Promise<{name: string, entries: {uid: number, keys: string[], content: string}[]}[]>}
+ */
+async function fetchCharacterLorebooks() {
+    const character = characters[this_chid];
+    if (!character) return [];
+
+    const bookNames = new Set();
+
+    const primaryWorld = character.data?.extensions?.world;
+    if (primaryWorld) bookNames.add(primaryWorld);
+
+    const fileName = getCharaFilename(this_chid);
+    const extraCharLore = world_info.charLore?.find(e => e.name === fileName);
+    if (extraCharLore?.extraBooks) {
+        for (const book of extraCharLore.extraBooks) bookNames.add(book);
+    }
+
+    if (bookNames.size === 0) return [];
+
+    const results = [];
+    for (const name of bookNames) {
+        try {
+            const data = await loadWorldInfo(name);
+            if (!data?.entries) continue;
+            const entries = Object.values(data.entries).map(e => ({
+                uid: e.uid,
+                keys: Array.isArray(e.key) ? e.key.filter(Boolean) : [],
+                content: e.content ? e.content.substring(0, 150) : '',
+            }));
+            results.push({ name, entries });
+        } catch (err) {
+            console.error('[CharMemory]', `Failed to load lorebook "${name}":`, err);
+        }
+    }
+    return results;
+}
+
 function updateDiagnosticsDisplay() {
     const container = $('#charMemory_diagnosticsContent');
     if (!container.length) return;
@@ -1423,9 +1463,40 @@ function updateDiagnosticsDisplay() {
     }
     html += '</div>';
 
-    // World Info Entries
+    // Character Lorebooks (static)
+    html += '<div class="charMemory_diagSection"><strong>Character Lorebooks</strong>';
+    html += '<div id="charMemory_diagLorebooks"><div class="charMemory_diagEmpty">Loading...</div></div></div>';
+
+    fetchCharacterLorebooks().then(books => {
+        const el = document.getElementById('charMemory_diagLorebooks');
+        if (!el) return;
+        if (books.length === 0) {
+            el.textContent = 'No lorebooks bound to this character';
+            el.classList.add('charMemory_diagEmpty');
+            return;
+        }
+        let booksHtml = '';
+        for (const book of books) {
+            booksHtml += `<div class="charMemory_diagCard">
+                <div class="charMemory_diagCardTitle">${escapeHtml(book.name)} (${book.entries.length} entries)</div>`;
+            for (const entry of book.entries) {
+                const keysStr = entry.keys.length > 0 ? entry.keys.join(', ') : '(no keys)';
+                booksHtml += `<div class="charMemory_diagCardKeys">Keys: ${escapeHtml(keysStr)}</div>`;
+            }
+            booksHtml += '</div>';
+        }
+        el.innerHTML = booksHtml;
+    }).catch(() => {
+        const el = document.getElementById('charMemory_diagLorebooks');
+        if (el) {
+            el.textContent = 'Failed to load lorebooks';
+            el.classList.add('charMemory_diagEmpty');
+        }
+    });
+
+    // Activated Lorebook Entries (runtime)
     const wiEntries = lastDiagnostics.worldInfoEntries;
-    html += `<div class="charMemory_diagSection"><strong>Lorebook Entries (${wiEntries.length} active)</strong>`;
+    html += `<div class="charMemory_diagSection"><strong>Activated Entries — Last Generation (${wiEntries.length})</strong>`;
     if (wiEntries.length > 0) {
         for (const entry of wiEntries) {
             const keysStr = entry.keys.length > 0 ? entry.keys.join(', ') : '(no keys)';
@@ -1436,7 +1507,7 @@ function updateDiagnosticsDisplay() {
             </div>`;
         }
     } else {
-        html += '<div class="charMemory_diagEmpty">No lorebook entries activated</div>';
+        html += '<div class="charMemory_diagEmpty">No entries activated yet (generate a message first)</div>';
     }
     html += '</div>';
 

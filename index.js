@@ -1468,7 +1468,13 @@ function updateDiagnosticsDisplay() {
     const dbPrompt = lastDiagnostics.extensionPrompts?.['4_vectors_data_bank'];
     html += '<div class="charMemory_diagSection"><strong>Injected Memories — Last Generation</strong>';
     if (dbPrompt && dbPrompt.content) {
-        // Strip the file_template_db wrapper to show only the retrieved chunks
+        html += '<div id="charMemory_diagInjected"><div class="charMemory_diagEmpty">Matching...</div></div></div>';
+    } else {
+        html += '<div class="charMemory_diagEmpty">No memory chunks injected yet (generate a message first)</div></div>';
+    }
+
+    if (dbPrompt && dbPrompt.content) {
+        // Strip the file_template_db wrapper to isolate chunk text
         let injectedText = dbPrompt.content;
         const template = extension_settings.vectors?.file_template_db || '';
         if (template && template.includes('{{text}}')) {
@@ -1483,13 +1489,39 @@ function updateDiagnosticsDisplay() {
             }
         }
         injectedText = injectedText.trim();
-        html += `<div class="charMemory_diagCard">
-            <div class="charMemory_diagCardContent" style="white-space:pre-wrap;">${escapeHtml(injectedText)}${injectedText.length >= 2000 ? '...' : ''}</div>
-        </div>`;
-    } else {
-        html += '<div class="charMemory_diagEmpty">No memory chunks injected yet (generate a message first)</div>';
+
+        // Match individual memory bullets against the injected chunk text
+        readMemories().then(content => {
+            const el = document.getElementById('charMemory_diagInjected');
+            if (!el) return;
+            const blocks = parseMemories(content);
+            const matched = [];
+            for (const block of blocks) {
+                for (const bullet of block.bullets) {
+                    if (injectedText.includes(bullet)) {
+                        matched.push(bullet);
+                    }
+                }
+            }
+            if (matched.length === 0) {
+                el.textContent = 'No matching memory bullets found in injected chunks';
+                el.classList.add('charMemory_diagEmpty');
+                return;
+            }
+            let matchHtml = `<div class="charMemory_diagCard"><div class="charMemory_diagCardTitle">${matched.length} memor${matched.length === 1 ? 'y' : 'ies'} injected</div>`;
+            for (const bullet of matched) {
+                matchHtml += `<div class="charMemory_diagCardContent">- ${escapeHtml(bullet)}</div>`;
+            }
+            matchHtml += '</div>';
+            el.innerHTML = matchHtml;
+        }).catch(() => {
+            const el = document.getElementById('charMemory_diagInjected');
+            if (el) {
+                el.textContent = 'Failed to match memories';
+                el.classList.add('charMemory_diagEmpty');
+            }
+        });
     }
-    html += '</div>';
 
     // Character Lorebooks (static)
     html += '<div class="charMemory_diagSection"><strong>Character Lorebooks</strong>';

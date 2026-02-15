@@ -1327,19 +1327,29 @@ function captureDiagnostics() {
 /**
  * Check vectorization status for a file URL.
  * @param {string} fileUrl The attachment URL.
- * @returns {Promise<number|false|null>} Number of chunks if vectorized, false if not, null if vectors unavailable.
+ * @returns {Promise<{chunks: number, source: string, model: string}|false|null>}
  */
 async function checkVectorizationStatus(fileUrl) {
     try {
+        const vecSettings = extension_settings.vectors;
+        if (!vecSettings || !vecSettings.enabled_files) return null;
+
+        const source = vecSettings.source || 'transformers';
+        const modelKey = `${source === 'palm' || source === 'vertexai' ? 'google' : source}_model`;
+        const model = vecSettings[modelKey] || '';
+
         const collectionId = `file_${getStringHash(fileUrl)}`;
+        const body = { collectionId, source };
+        if (model) body.model = model;
+
         const response = await fetch('/api/vector/list', {
             method: 'POST',
             headers: getRequestHeaders(),
-            body: JSON.stringify({ collectionId }),
+            body: JSON.stringify(body),
         });
         if (!response.ok) return null;
         const hashes = await response.json();
-        return hashes.length > 0 ? hashes.length : false;
+        return hashes.length > 0 ? { chunks: hashes.length, source, model } : false;
     } catch {
         return null;
     }
@@ -1383,11 +1393,12 @@ function updateDiagnosticsDisplay() {
             const vecEl = document.getElementById('charMemory_diagVectorization');
             if (!vecEl) return;
             if (result === null) {
-                vecEl.textContent = 'N/A (vectors not enabled)';
+                vecEl.textContent = 'N/A (vectors not enabled for files)';
             } else if (result === false) {
                 vecEl.textContent = 'No';
             } else {
-                vecEl.textContent = `Yes (${result} chunk${result === 1 ? '' : 's'})`;
+                const via = result.model ? `${result.source}/${result.model}` : result.source;
+                vecEl.textContent = `Yes (${result.chunks} chunk${result.chunks === 1 ? '' : 's'}) via ${via}`;
             }
         }).catch(() => {});
     }

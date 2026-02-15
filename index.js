@@ -611,10 +611,17 @@ function collectRecentMessages({ endIndex = null, chatArray = null, lastExtracte
     const slice = chat.slice(startIndex, sliceEnd);
 
     const lines = [];
+    let skippedSystem = 0;
+    let skippedEmpty = 0;
     for (const msg of slice) {
-        if (msg.is_system) continue;
-        if (!msg.mes) continue;
+        if (msg.is_system) { skippedSystem++; continue; }
+        if (!msg.mes) { skippedEmpty++; continue; }
         lines.push(`${msg.name}: ${msg.mes}`);
+    }
+
+    if (lines.length === 0 && slice.length > 0) {
+        const sample = slice[0];
+        logActivity(`DEBUG: slice has ${slice.length} items, skippedSystem=${skippedSystem}, skippedEmpty=${skippedEmpty}. First item keys: ${Object.keys(sample || {}).join(', ')}. is_system=${sample?.is_system}, mes type=${typeof sample?.mes}, mes length=${sample?.mes?.length ?? 'N/A'}`, 'warning');
     }
 
     logActivity(`Collected ${lines.length} messages (indices ${startIndex}-${sliceEnd - 1})`);

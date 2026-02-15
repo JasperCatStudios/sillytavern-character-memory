@@ -117,18 +117,20 @@ INSTRUCTIONS:
 5. Use ONE <memory> block per encounter or event. Everything in the same scene = one block.
 6. HARD LIMIT: No more than 8 bullet points TOTAL. If you have more, you are being too granular — cut the least significant ones.
 7. If nothing genuinely new or significant, respond with exactly: NO_NEW_MEMORIES
+8. Write about WHAT HAPPENED, not about the conversation itself. Never write "she told him about X" or "she described her X" or "she admitted Y" — instead write the actual fact: "X happened" or "she did Y."
 
 WHAT TO EXTRACT — ask for each item: "Would {{char}} bring this up unprompted weeks or months later?"
 - Backstory reveals, personal history, goals, fears (only if NOT already in the character card)
 - Relationship changes (new connections, betrayals, shifts in feeling)
 - Significant events and their outcomes (not the step-by-step process)
-- Stated preferences, opinions, values (only if NOT already in the character card)
 - Skills, possessions, or status changes
 - Emotional turning points
 
 DO NOT EXTRACT:
-- Anything already described in the CHARACTER CARD above — traits, profession, appearance, personality, habits, preferences, or abilities that are baseline knowledge
-- Routine behaviors that simply confirm what the card already says (e.g. if the card says "smoker", don't extract "she smoked a cigarette")
+- Anything already described in the CHARACTER CARD above — traits, profession, appearance, personality, habits, preferences, or abilities that are baseline knowledge. This includes rephrasing card traits as discoveries (e.g. if the card says "exhibitionist", do not write "she admitted that being watched turns her on")
+- Routine behaviors that simply confirm what the card already says (e.g. if the card says "smoker", don't extract "she smoked a cigarette"; if the card implies safe sex practices, don't extract "she insisted on a condom")
+- Meta-narration about the conversation itself — do not write "she told him about X", "she described her past", "she discussed her career". Write the actual facts revealed, not the act of revealing them
+- Preferences, opinions, or values that are already expressed or clearly implied by the character card
 - Step-by-step accounts of what happened (this is the most common mistake — summarize outcomes, not processes)
 - Individual actions, movements, or position changes during a scene
 - Scene-setting details (room descriptions, weather, clothing, atmosphere)

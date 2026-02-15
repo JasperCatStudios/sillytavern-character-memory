@@ -93,17 +93,25 @@
                     <small><b>Auto-Extraction</b></small>
 
                     <div class="charMemory_sliderRow">
-                        <label for="charMemory_interval" title="How many new messages trigger an automatic extraction. Only counts messages received after the last extraction.">
-                            <small>Extract after every <span id="charMemory_intervalValue">10</span> messages</small>
+                        <label title="How many new messages trigger an automatic extraction. Only counts messages received after the last extraction.">
+                            <small>Extract after every N messages</small>
                         </label>
-                        <input type="range" id="charMemory_interval" min="3" max="50" step="1" value="10" />
+                        <input class="neo-range-slider" type="range" id="charMemory_interval" min="3" max="50" step="1" value="10" />
+                        <div class="wide100p">
+                            <input class="neo-range-input" type="number" min="3" max="50" step="1"
+                                   data-for="charMemory_interval" id="charMemory_intervalCounter" />
+                        </div>
                     </div>
 
                     <div class="charMemory_sliderRow">
-                        <label for="charMemory_minCooldown" title="Minimum time between auto-extractions, even if the message threshold is met. Prevents rapid-fire extractions. Manual 'Extract Now' bypasses this.">
-                            <small>Minimum wait between extractions: <span id="charMemory_minCooldownValue">10</span> min</small>
+                        <label title="Minimum time between auto-extractions, even if the message threshold is met. Prevents rapid-fire extractions. Manual 'Extract Now' bypasses this.">
+                            <small>Minimum wait between extractions (min)</small>
                         </label>
-                        <input type="range" id="charMemory_minCooldown" min="0" max="30" step="1" value="10" />
+                        <input class="neo-range-slider" type="range" id="charMemory_minCooldown" min="0" max="30" step="1" value="10" />
+                        <div class="wide100p">
+                            <input class="neo-range-input" type="number" min="0" max="30" step="1"
+                                   data-for="charMemory_minCooldown" id="charMemory_minCooldownCounter" />
+                        </div>
                     </div>
 
                     <small class="charMemory_helperText">These settings only affect automatic extraction. Manual extraction and batch extraction ignore them.</small>
@@ -113,17 +121,25 @@
                     <small><b>Extraction Settings</b></small>
 
                     <div class="charMemory_sliderRow">
-                        <label for="charMemory_maxMessages" title="How many messages to include in each LLM call. The system loops through all unprocessed messages in chunks of this size.">
-                            <small>Messages per LLM call: <span id="charMemory_maxMessagesValue">20</span></small>
+                        <label title="How many messages to include in each LLM call. The system loops through all unprocessed messages in chunks of this size.">
+                            <small>Messages per LLM call</small>
                         </label>
-                        <input type="range" id="charMemory_maxMessages" min="5" max="50" step="1" value="20" />
+                        <input class="neo-range-slider" type="range" id="charMemory_maxMessages" min="10" max="200" step="1" value="50" />
+                        <div class="wide100p">
+                            <input class="neo-range-input" type="number" min="10" max="200" step="1"
+                                   data-for="charMemory_maxMessages" id="charMemory_maxMessagesCounter" />
+                        </div>
                     </div>
 
                     <div class="charMemory_sliderRow">
-                        <label for="charMemory_responseLength" title="Maximum tokens the LLM can use for its response. Increase if extractions seem truncated.">
-                            <small>Max response length: <span id="charMemory_responseLengthValue">500</span></small>
+                        <label title="Maximum tokens the LLM can use for its response. Increase if extractions seem truncated.">
+                            <small>Max response length</small>
                         </label>
-                        <input type="range" id="charMemory_responseLength" min="100" max="2000" step="50" value="500" />
+                        <input class="neo-range-slider" type="range" id="charMemory_responseLength" min="100" max="2000" step="50" value="1000" />
+                        <div class="wide100p">
+                            <input class="neo-range-input" type="number" min="100" max="2000" step="50"
+                                   data-for="charMemory_responseLength" id="charMemory_responseLengthCounter" />
+                        </div>
                     </div>
 
                     <!-- Section 4: Storage -->
@@ -159,10 +175,10 @@
                     <hr class="charMemory_separator" />
 
                     <div class="charMemory_statusRow">
-                        <input type="button" id="charMemory_resetTracking" class="menu_button" value="Reset Extraction State" title="Reset extraction tracking for all of this character's chats so all messages can be re-processed. Does not delete any memories." />
-                        <small class="charMemory_helperText">Resets extraction tracking for all chats (active + batch). Use before 'Extract Now' or 'Batch Extract' to re-process from the beginning.</small>
-                        <input type="button" id="charMemory_resetExtraction" class="menu_button charMemory_dangerBtn" value="Clear All Memories" title="Delete the memory file and reset extraction state for all chats. This cannot be undone." />
-                        <small class="charMemory_helperText">Deletes the memory file and resets extraction tracking for all chats. This cannot be undone.</small>
+                        <input type="button" id="charMemory_resetTracking" class="menu_button" value="Reset Extraction State" title="Reset extraction tracking for the current character's chats so all messages can be re-processed. Does not delete any memories." />
+                        <small class="charMemory_helperText">Resets extraction tracking for the current character (active chat + batch state). Use before 'Extract Now' or 'Batch Extract' to re-process from the beginning. Does not affect other characters.</small>
+                        <input type="button" id="charMemory_resetExtraction" class="menu_button charMemory_dangerBtn" value="Clear All Memories" title="Delete the memory file and reset extraction state for the current character. This cannot be undone." />
+                        <small class="charMemory_helperText">Deletes the memory file and resets extraction tracking for the current character. In default mode, this file contains memories from all of this character's chats. This cannot be undone.</small>
                     </div>
                 </div>
             </div>

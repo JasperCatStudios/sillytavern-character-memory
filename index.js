@@ -56,6 +56,8 @@ let lastExtractionResult = null;
 let consolidationBackup = null;
 let lastExtractionTime = 0; // session-only, resets on page load
 
+const CONSOLIDATION_THRESHOLD = 10;
+
 // ============ Activity Log ============
 
 const MAX_LOG_ENTRIES = 50;
@@ -89,7 +91,7 @@ function updateActivityLogDisplay() {
     $container.html(html);
 }
 
-const defaultExtractionPrompt = `You are a memory extraction assistant. Read the recent chat messages and extract important character memories that would be useful for future conversations.
+const defaultExtractionPrompt = `You are a memory extraction assistant. Read the recent chat messages and identify the most significant facts, events, and developments worth remembering long-term.
 
 Character name: {{charName}}
 
@@ -104,49 +106,48 @@ Character name: {{charName}}
 CRITICAL: Only extract memories from the RECENT CHAT MESSAGES section above. The EXISTING MEMORIES section is provided solely so you know what has already been recorded. Do not restate, paraphrase, or recombine anything from existing memories.
 
 INSTRUCTIONS:
-1. Extract only NEW facts, events, relationships, emotional developments, or significant details NOT already in existing memories. Focus on what {{char}} would remember or reference later.
-2. Write in past tense. Do not describe {{char}}'s current real-time state or in-progress actions.
-3. Summarize in third person. Do NOT copy or quote dialogue from the chat verbatim.
-4. Do NOT use emojis anywhere in the output.
-5. Each memory must be wrapped in <memory></memory> tags with a markdown bulleted list (lines starting with "- ").
-6. Use ONE <memory> block per encounter or event. Everything that happened with the same person in the same scene belongs in one block. Do not split a single encounter across multiple blocks.
-7. Do NOT extract anything that contradicts what actually happened in the conversation.
-8. If nothing genuinely new or significant to extract, respond with exactly: NO_NEW_MEMORIES
+1. Extract only NEW facts, events, relationships, or character developments NOT already in existing memories.
+2. Write in past tense, third person. Do NOT quote dialogue verbatim.
+3. Do NOT use emojis.
+4. Wrap output in <memory></memory> tags with a markdown bulleted list (lines starting with "- ").
+5. Use ONE <memory> block per encounter or event. Everything in the same scene = one block.
+6. HARD LIMIT: No more than 8 bullet points TOTAL. If you have more, you are being too granular — cut the least significant ones.
+7. If nothing genuinely new or significant, respond with exactly: NO_NEW_MEMORIES
 
-FOCUS ON these categories:
-- Life events and backstory reveals
-- Relationships (new connections, changes in feelings, conflicts)
-- Stated preferences, opinions, likes/dislikes
-- Personal history, goals, fears, motivations
-- Emotional developments and turning points
+WHAT TO EXTRACT — ask for each item: "Would {{char}} bring this up unprompted weeks or months later?"
+- Backstory reveals, personal history, goals, fears
+- Relationship changes (new connections, betrayals, shifts in feeling)
+- Significant events and their outcomes (not the step-by-step process)
+- Stated preferences, opinions, values
 - Skills, possessions, or status changes
-- Significant encounters or experiences (who, what happened, what was notable — not a step-by-step account)
+- Emotional turning points
 
-AVOID extracting:
-- Repetitive play-by-play minutiae (individual movements, position changes, moment-to-moment physical mechanics)
-- Temporary states ("is currently cold", "is sitting down")
+DO NOT EXTRACT:
+- Step-by-step accounts of what happened (this is the most common mistake — summarize outcomes, not processes)
+- Individual actions, movements, or position changes during a scene
+- Scene-setting details (room descriptions, weather, clothing, atmosphere)
+- Temporary physical states ("leaned against him", "felt his warmth")
 - Paraphrased dialogue or conversation filler
-- Scene-setting or atmosphere descriptions
-- Moment-to-moment location tracking
-- Actions with no lasting significance
-- Mundane details (routine clothing, weather, small talk, cover stories) unless they played a significant role in the event
-- System metadata, OOC notes, relationship/stat metrics tables, image generation prompts, or any non-diegetic content embedded in messages
+- Anything with no lasting significance beyond the immediate moment
 
-NOTE: When an encounter or event is significant, capture the specific details that made it memorable — not generic summaries. Include visceral, sensory, and explicit details where they are what {{char}} would actually remember. "She orgasmed while grinding against his face" is a memory. "She engaged in sexual activity" is not — it's a euphemism that loses the actual experience.
+NEGATIVE EXAMPLE — do NOT write memories like this:
+<bad_example>
+- She approached him at the bar and ordered a negroni.
+- She leaned on the table and signaled the bartender with two fingers.
+- She invaded his personal space to test his reaction.
+- She led him to an observation deck via a keycard.
+- She kissed him while scanning the surroundings.
+- She lit a cigarette one-handed with a practiced flick.
+- She leaned back against him and felt his body heat through her blouse.
+- She rubbed her hips against him to tease him.
+- She led him to his hotel room while scanning for cameras.
+- She positioned herself between his knees in a chair.
+</bad_example>
+This is a play-by-play scene summary. It narrates every beat instead of capturing what matters. A good extraction of the same scene would be 3-4 bullets covering: who, what was significant, and what the outcome was.
 
-DO NOT sanitize, euphemize, or generalize. Write what actually happened in concrete terms. Include specific actions, words said, and physical details that made the moment distinct. Two similar events with different people or contexts are distinct memories.
+NOTE: When content is explicit or violent, write what actually happened in concrete terms. Do not sanitize or euphemize. "She shot him twice in the chest" is a memory. "Violence occurred" is not.
 
-Each memory block should answer: "What would {{char}} remember or reference about this — in their own unfiltered terms?"
-
-EXAMPLE OUTPUT FORMAT:
-<memory>
-- {{char}} revealed she grew up in a coastal village north of the capital and has two older brothers who work as fishermen.
-- She became visibly upset when her father was mentioned and refused to elaborate.
-</memory>
-<memory>
-- {{char}} came hard while riding him, clamping her thighs around his head and grinding against his face until she couldn't speak.
-- She sent a post-orgasm selfie to Ed with the message "Think he'll notice I'm not asking for a condom?" while the other man was out of the room.
-</memory>
+Each memory block should answer: "If {{char}} mentioned this encounter to someone months later, what details would they include?"
 
 Output ONLY <memory> blocks (or NO_NEW_MEMORIES). No headers, no commentary, no extra text.`;
 
@@ -159,8 +160,8 @@ const EXTRACTION_SOURCE = {
 const defaultSettings = {
     enabled: true,
     interval: 10,
-    maxMessagesPerExtraction: 20,
-    responseLength: 800,
+    maxMessagesPerExtraction: 50,
+    responseLength: 1000,
     extractionPrompt: defaultExtractionPrompt,
     source: EXTRACTION_SOURCE.MAIN_LLM,
     fileName: DEFAULT_FILE_NAME,
@@ -436,10 +437,17 @@ function loadSettings() {
         }
     }
 
-    // Migrate old default prompts that used --- separators to the new <memory> block format
+    // Migrate old default prompts to current version
     const savedPrompt = extension_settings[MODULE_NAME].extractionPrompt || '';
-    if (savedPrompt.includes('Separate each memory with a line containing only')) {
+    if (savedPrompt.includes('Separate each memory with a line containing only') ||
+        savedPrompt.includes('FOCUS ON these categories:')) {
         extension_settings[MODULE_NAME].extractionPrompt = defaultExtractionPrompt;
+        saveSettingsDebounced();
+    }
+
+    // Clamp maxMessagesPerExtraction to new minimum
+    if (extension_settings[MODULE_NAME].maxMessagesPerExtraction < 10) {
+        extension_settings[MODULE_NAME].maxMessagesPerExtraction = 10;
         saveSettingsDebounced();
     }
 
@@ -453,13 +461,13 @@ function loadSettings() {
     $('#charMemory_enabled').prop('checked', extension_settings[MODULE_NAME].enabled);
     $('#charMemory_perChat').prop('checked', extension_settings[MODULE_NAME].perChat);
     $('#charMemory_interval').val(extension_settings[MODULE_NAME].interval);
-    $('#charMemory_intervalValue').text(extension_settings[MODULE_NAME].interval);
+    $('#charMemory_intervalCounter').val(extension_settings[MODULE_NAME].interval);
     $('#charMemory_maxMessages').val(extension_settings[MODULE_NAME].maxMessagesPerExtraction);
-    $('#charMemory_maxMessagesValue').text(extension_settings[MODULE_NAME].maxMessagesPerExtraction);
+    $('#charMemory_maxMessagesCounter').val(extension_settings[MODULE_NAME].maxMessagesPerExtraction);
     $('#charMemory_responseLength').val(extension_settings[MODULE_NAME].responseLength);
-    $('#charMemory_responseLengthValue').text(extension_settings[MODULE_NAME].responseLength);
+    $('#charMemory_responseLengthCounter').val(extension_settings[MODULE_NAME].responseLength);
     $('#charMemory_minCooldown').val(extension_settings[MODULE_NAME].minCooldownMinutes);
-    $('#charMemory_minCooldownValue').text(extension_settings[MODULE_NAME].minCooldownMinutes);
+    $('#charMemory_minCooldownCounter').val(extension_settings[MODULE_NAME].minCooldownMinutes);
     $('#charMemory_extractionPrompt').val(extension_settings[MODULE_NAME].extractionPrompt);
     $('#charMemory_source').val(extension_settings[MODULE_NAME].source);
     $('#charMemory_fileName').val(extension_settings[MODULE_NAME].fileName);
@@ -1175,6 +1183,92 @@ async function extractMemories({
             }
         }
 
+        // Auto-consolidation pass: if multi-chunk extraction produced too many bullets, consolidate
+        let autoConsolidated = false;
+        if (chunksProcessed > 1 && totalMemories > CONSOLIDATION_THRESHOLD) {
+            const postMergeBlocks = parseMemories(await readMemories());
+            const currentChatBlocks = postMergeBlocks.filter(b => b.chat === effectiveChatId);
+            const otherBlocks = postMergeBlocks.filter(b => b.chat !== effectiveChatId);
+            const currentBulletCount = countMemories(currentChatBlocks);
+
+            if (currentBulletCount > CONSOLIDATION_THRESHOLD) {
+                logActivity(`Auto-consolidation triggered: ${currentBulletCount} bullets from current chat exceed threshold of ${CONSOLIDATION_THRESHOLD}`);
+                toastr.info(`Auto-consolidating ${currentBulletCount} bullets...`, 'CharMemory', { timeOut: 3000 });
+
+                const charName = getCharacterName() || '{{char}}';
+                const memoriesText = currentChatBlocks.map(b =>
+                    `${b.bullets.map(bullet => `- ${bullet}`).join('\n')}`,
+                ).join('\n');
+
+                let consolidatePrompt = autoConsolidationPrompt
+                    .replace(/\{\{charName\}\}/g, charName)
+                    .replace(/\{\{memories\}\}/g, memoriesText);
+                consolidatePrompt = substituteParamsExtended(consolidatePrompt);
+
+                const verbose = extension_settings[MODULE_NAME].verboseLogging;
+                if (verbose) {
+                    logActivity(`Auto-consolidation prompt (${consolidatePrompt.length} chars):\n${consolidatePrompt}`);
+                }
+
+                try {
+                    let consolidateResult;
+                    if (source === EXTRACTION_SOURCE.NANOGPT) {
+                        const systemPrompt = extension_settings[MODULE_NAME].nanogptSystemPrompt || 'You are a memory consolidation assistant.';
+                        consolidateResult = await generateNanoGptResponse(
+                            [{ role: 'system', content: systemPrompt }, { role: 'user', content: consolidatePrompt }],
+                            extension_settings[MODULE_NAME].responseLength * 2,
+                        );
+                    } else if (source === EXTRACTION_SOURCE.WEBLLM) {
+                        if (isWebLlmSupported()) {
+                            consolidateResult = await generateWebLlmChatPrompt(
+                                [{ role: 'system', content: 'You are a memory consolidation assistant.' }, { role: 'user', content: consolidatePrompt }],
+                                { max_tokens: extension_settings[MODULE_NAME].responseLength * 2 },
+                            );
+                        }
+                    } else {
+                        consolidateResult = await generateQuietPrompt({
+                            quietPrompt: consolidatePrompt,
+                            skipWIAN: true,
+                            responseLength: extension_settings[MODULE_NAME].responseLength * 2,
+                        });
+                    }
+
+                    let cleanConsolidate = removeReasoningFromString(consolidateResult || '').trim();
+                    if (verbose && cleanConsolidate) {
+                        logActivity(`Auto-consolidation response:\n${cleanConsolidate}`);
+                    }
+
+                    if (cleanConsolidate) {
+                        const now = new Date();
+                        const timestamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+                        const memRegex = /<memory>([\s\S]*?)<\/memory>/gi;
+                        const memMatches = [...cleanConsolidate.matchAll(memRegex)];
+                        const rawEntries = memMatches.length > 0
+                            ? memMatches.map(m => m[1].trim()).filter(Boolean)
+                            : [cleanConsolidate.trim()].filter(Boolean);
+
+                        const consolidatedBlocks = rawEntries.map(entry => {
+                            const bullets = entry.split('\n')
+                                .map(l => l.trim())
+                                .filter(l => l.startsWith('- '))
+                                .map(l => l.slice(2).trim())
+                                .filter(Boolean);
+                            return { chat: effectiveChatId, date: timestamp, bullets: bullets.length > 0 ? bullets : [entry] };
+                        });
+
+                        const newBulletCount = countMemories(consolidatedBlocks);
+                        await writeMemories(serializeMemories([...otherBlocks, ...consolidatedBlocks]));
+                        totalMemories = newBulletCount;
+                        autoConsolidated = true;
+                        logActivity(`Auto-consolidation: ${currentBulletCount} bullets → ${newBulletCount}`, 'success');
+                    }
+                } catch (consolidateErr) {
+                    console.error(LOG_PREFIX, 'Auto-consolidation failed:', consolidateErr);
+                    logActivity(`Auto-consolidation failed: ${consolidateErr.message} — keeping original extraction`, 'warning');
+                }
+            }
+        }
+
         // Final status updates
         if (isActiveChat) {
             ensureMetadata();
@@ -1186,7 +1280,8 @@ async function extractMemories({
         updateAllIndicators();
 
         if (totalMemories > 0) {
-            toastr.success(`${totalMemories} memor${totalMemories === 1 ? 'y' : 'ies'} extracted in ${chunksProcessed} chunk(s).`, 'CharMemory');
+            const consolidatedNote = autoConsolidated ? ' (auto-consolidated)' : '';
+            toastr.success(`${totalMemories} memor${totalMemories === 1 ? 'y' : 'ies'} saved${consolidatedNote} from ${chunksProcessed} chunk(s).`, 'CharMemory');
         } else if (chunksProcessed > 0) {
             toastr.info('No new memories found.', 'CharMemory');
         }
@@ -1789,6 +1884,22 @@ MEMORIES TO CONSOLIDATE:
 
 Output ONLY <memory> blocks. No headers, no commentary, no extra text.`;
 
+const autoConsolidationPrompt = `These memory notes were extracted from a recent conversation but are too granular. Consolidate them into no more than 8 concise bullet points.
+
+Character name: {{charName}}
+
+MEMORIES TO CONSOLIDATE:
+{{memories}}
+
+RULES:
+1. Keep only what {{char}} would bring up months later — cut play-by-play and trivial details.
+2. Merge related items into single bullets where possible.
+3. Preserve concrete details for significant events — do not sanitize or euphemize.
+4. Write in past tense, third person.
+5. Output a single <memory> block with no more than 8 bullet points.
+
+Output ONLY one <memory> block. No headers, no commentary, no extra text.`;
+
 async function consolidateMemories() {
     if (inApiCall) {
         toastr.warning('An API call is already in progress.', 'CharMemory');
@@ -1965,29 +2076,28 @@ function setupListeners() {
     $('#charMemory_interval').off('input').on('input', function () {
         const val = Number($(this).val());
         extension_settings[MODULE_NAME].interval = val;
-        $('#charMemory_intervalValue').text(val);
-
+        $('#charMemory_intervalCounter').val(val);
         saveSettingsDebounced();
     });
 
     $('#charMemory_maxMessages').off('input').on('input', function () {
         const val = Number($(this).val());
         extension_settings[MODULE_NAME].maxMessagesPerExtraction = val;
-        $('#charMemory_maxMessagesValue').text(val);
+        $('#charMemory_maxMessagesCounter').val(val);
         saveSettingsDebounced();
     });
 
     $('#charMemory_minCooldown').off('input').on('input', function () {
         const val = Number($(this).val());
         extension_settings[MODULE_NAME].minCooldownMinutes = val;
-        $('#charMemory_minCooldownValue').text(val);
+        $('#charMemory_minCooldownCounter').val(val);
         saveSettingsDebounced();
     });
 
     $('#charMemory_responseLength').off('input').on('input', function () {
         const val = Number($(this).val());
         extension_settings[MODULE_NAME].responseLength = val;
-        $('#charMemory_responseLengthValue').text(val);
+        $('#charMemory_responseLengthCounter').val(val);
         saveSettingsDebounced();
     });
 

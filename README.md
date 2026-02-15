@@ -135,8 +135,8 @@ These only affect automatic extraction. Manual extraction and batch extraction i
 
 | Setting | Default | Description |
 |---------|---------|-------------|
-| Messages per LLM call | 20 | How many messages to include in each LLM call. The system loops through all unprocessed messages in chunks of this size. |
-| Max response length | 500 | Token limit for LLM extraction response per chunk |
+| Messages per LLM call | 50 | How many messages to include in each LLM call. The system loops through all unprocessed messages in chunks of this size. |
+| Max response length | 1000 | Token limit for LLM extraction response per chunk |
 
 #### Storage
 
@@ -178,16 +178,16 @@ Memory extraction is a structured task that requires strong instruction followin
 
 | Model | Notes |
 |-------|-------|
-| **DeepSeek V3.1 / V3.2** | Strong instruction following, good at structured extraction. Recommended first choice. |
-| **Qwen3-235B** | Large model, handles nuanced instructions well |
-| **Mistral Large 3 (675B)** | Very capable, good structured output |
+| **GLM 4.7** | Best quality and fastest. Produces concise, significant memories with minimal play-by-play. Recommended first choice. |
+| **DeepSeek V3.1 / V3.2** | Good instruction following, occasionally misses important events. Solid second choice. |
+| **Mistral Large 3 (675B)** | Good quality but slower. Can be analytically verbose — may need higher response length. |
 | **Hermes 4 (405B)** | Good with roleplay-adjacent content, won't refuse |
 
 ### Models to avoid for extraction
 
 | Model | Issue |
 |-------|-------|
-| **Small/Flash models** (e.g., GLM 4.7 Flash, Ministral 8B) | Too small for reliable instruction following. Tend to remix existing memories into new extractions and get basic facts wrong. |
+| **Qwen3-235B** | Tends toward compressed play-by-play even with the improved prompt. |
 | **Reasoning/Thinking variants** | Slower and more expensive with no benefit for extraction. The reasoning overhead isn't needed. |
 | **Heavily censored models** | May refuse to extract memories from mature/explicit content, returning NO_NEW_MEMORIES even when there are genuine new facts. |
 
@@ -196,7 +196,7 @@ Memory extraction is a structured task that requires strong instruction followin
 - **LLM returns NO_NEW_MEMORIES when there should be new ones**: Existing memories from other chats may overlap with current content. Try clearing the memory file or resetting extraction state.
 - **Memories contain facts from existing memories, not from the chat**: The model is too weak to respect the boundary markers. Switch to a larger model (DeepSeek V3.1+).
 - **Memories reverse who did what**: Same issue — model too small for accurate comprehension. Use a larger model.
-- **Memories are too detailed / play-by-play**: Customize the AVOID section in the extraction prompt to be more specific about what granularity you want.
+- **Memories are too detailed / play-by-play**: The default prompt (v3) now handles this with an 8-bullet cap and negative examples. If you still see play-by-play, try increasing "Messages per LLM call" to reduce chunking — fewer chunks means less total output to consolidate.
 - **"No unprocessed messages" on Extract Now**: All messages have already been processed. Click "Reset Extraction State" first to re-read from the beginning, then "Extract Now".
 - **Memories contain system metadata, relationship metrics, or image prompts**: The extension strips code blocks, markdown tables, `<details>` sections, and HTML tags before sending messages to the LLM. If metadata still leaks through, customize the AVOID section in the extraction prompt.
 
@@ -204,7 +204,7 @@ Memory extraction is a structured task that requires strong instruction followin
 
 - **Extract Now processes all unread messages in chunks.** The system loops through all unprocessed messages, sending them to the LLM in groups of "Messages per LLM call" size. For large backlogs (>3 chunks), a confirmation popup appears.
 - **The "Extract Here" brain button** on individual messages lets you target specific parts of a conversation without resetting the whole extraction state.
-- **Messages per LLM call** controls chunk size. If set to 20 and there are 100 unprocessed messages, extraction makes ~5 API calls. Smaller chunks are cheaper but may miss cross-message context. Default of 20 works well; 50+ may cause timeouts with some models.
+- **Messages per LLM call** controls chunk size. If set to 50 and there are 200 unprocessed messages, extraction makes ~4 API calls. Larger chunks give the LLM more context per call and produce better-quality memories. The default of 50 is a good balance; increase further if your model handles large contexts well. If multi-chunk extraction produces too many bullets (>10), an automatic consolidation pass runs to merge them down.
 - **Cooldown only affects auto-extraction.** Manual "Extract Now", per-message brain button, and batch extraction always work immediately.
 
 ## Tools & Diagnostics

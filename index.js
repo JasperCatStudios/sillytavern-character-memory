@@ -1468,7 +1468,21 @@ function updateDiagnosticsDisplay() {
     const dbPrompt = lastDiagnostics.extensionPrompts?.['4_vectors_data_bank'];
     html += '<div class="charMemory_diagSection"><strong>Injected Memories — Last Generation</strong>';
     if (dbPrompt && dbPrompt.content) {
-        const injectedText = dbPrompt.content;
+        // Strip the file_template_db wrapper to show only the retrieved chunks
+        let injectedText = dbPrompt.content;
+        const template = extension_settings.vectors?.file_template_db || '';
+        if (template && template.includes('{{text}}')) {
+            const [before, after] = template.split('{{text}}');
+            const substBefore = before ? substituteParamsExtended(before) : '';
+            const substAfter = after ? substituteParamsExtended(after) : '';
+            if (substBefore && injectedText.startsWith(substBefore)) {
+                injectedText = injectedText.slice(substBefore.length);
+            }
+            if (substAfter && injectedText.endsWith(substAfter)) {
+                injectedText = injectedText.slice(0, -substAfter.length);
+            }
+        }
+        injectedText = injectedText.trim();
         html += `<div class="charMemory_diagCard">
             <div class="charMemory_diagCardContent" style="white-space:pre-wrap;">${escapeHtml(injectedText)}${injectedText.length >= 2000 ? '...' : ''}</div>
         </div>`;

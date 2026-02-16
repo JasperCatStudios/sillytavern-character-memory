@@ -37,7 +37,7 @@ https://github.com/bal-spec/sillytavern-character-memory
 ```
 
 **2. Set up the extraction LLM**
-Scroll down in Extensions to find **Character Memory** → expand **Settings** → under **Provider**, pick one (e.g., OpenRouter, NanoGPT, Groq — any provider with an OpenAI-compatible API works) → enter your **API Key** → click **Test** to verify → select a **Model** from the dropdown.
+Scroll down in Extensions to find **Character Memory** → expand **Settings** → under **Provider**, pick one (e.g., OpenRouter, NanoGPT, Groq — any provider with an OpenAI-compatible API works) → enter your **API Key** → click **Connect** to fetch models → select a **Model** from the dropdown → click **Test Model** to verify it works.
 
 Not sure which model? **GLM 4.7** and **DeepSeek V3.1** are good starting points.
 
@@ -105,8 +105,9 @@ Dedicated API is the default and recommended option. It sends *only* the extract
 1. Open **Settings** in the CharMemory panel — **Dedicated API** is already selected
 2. Choose a **Provider** from the dropdown. Options include OpenAI, Anthropic, OpenRouter, Groq, DeepSeek, Mistral, NanoGPT, NVIDIA, Ollama, and others.
 3. Enter your **API Key** for that provider
-4. Click **Test** to verify the connection works
+4. Click **Connect** to fetch the list of available models
 5. Select a **Model** from the dropdown
+6. Click **Test Model** to verify the model responds correctly
 
 ![CharMemory Settings — Dedicated API with NanoGPT, model selection, and auto-extraction sliders](images/04-settings-provider.png)
 

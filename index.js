@@ -55,7 +55,6 @@ let inApiCall = false;
 let lastExtractionResult = null;
 let consolidationBackup = null;
 let lastExtractionTime = 0; // session-only, resets on page load
-let apiKeyDebounceTimer = null;
 
 const CONSOLIDATION_THRESHOLD = 10;
 
@@ -600,7 +599,7 @@ async function populateProviderModels(providerKey, forceRefresh = false) {
 
     // Early exit if API key required but missing
     if (preset.requiresApiKey && !providerSettings.apiKey) {
-        $select.empty().append('<option value="">-- Enter API key, then click ↻ --</option>');
+        $select.empty().append('<option value="">-- Enter API key, then click Connect --</option>');
         $('#charMemory_providerModelInfo').text('');
         return;
     }
@@ -658,7 +657,7 @@ async function populateProviderModels(providerKey, forceRefresh = false) {
         }
     } catch (err) {
         console.error(LOG_PREFIX, `Failed to fetch models for ${preset.name}:`, err);
-        toastr.error(`Failed to load models from ${preset.name}. Check console.`, 'CharMemory');
+        throw err;
     }
 }
 
@@ -2660,6 +2659,7 @@ function setupListeners() {
         extension_settings[MODULE_NAME].selectedProvider = String($(this).val());
         saveSettingsDebounced();
         $('#charMemory_providerTestStatus').hide().text('');
+        $('#charMemory_providerConnectStatus').hide().text('');
         updateProviderUI();
     });
 
@@ -2668,12 +2668,35 @@ function setupListeners() {
         const providerSettings = getProviderSettings(providerKey);
         providerSettings.apiKey = String($(this).val());
         saveSettingsDebounced();
-        // Auto-fetch models when key is provided
-        clearTimeout(apiKeyDebounceTimer);
-        if (providerSettings.apiKey) {
-            apiKeyDebounceTimer = setTimeout(() => {
-                populateProviderModels(providerKey, true);
-            }, 800);
+    });
+
+    $('#charMemory_providerConnect').off('click').on('click', async function () {
+        const providerKey = extension_settings[MODULE_NAME].selectedProvider;
+        const preset = PROVIDER_PRESETS[providerKey];
+        const providerSettings = getProviderSettings(providerKey);
+        const $btn = $(this);
+        const $status = $('#charMemory_providerConnectStatus');
+
+        if (preset?.requiresApiKey && !providerSettings.apiKey) {
+            $status.text('Enter an API key first.').css('color', '#e74c3c').show();
+            return;
+        }
+
+        $btn.prop('disabled', true).val('Connecting...');
+        $status.text('Fetching models...').css('color', '').show();
+
+        try {
+            await populateProviderModels(providerKey, true);
+            const modelCount = $('#charMemory_providerModel option').length - 1; // minus placeholder
+            if (modelCount > 0) {
+                $status.text(`Connected — ${modelCount} model${modelCount !== 1 ? 's' : ''} available.`).css('color', '#27ae60').show();
+            } else {
+                $status.text('Connected, but no models returned.').css('color', '#e67e22').show();
+            }
+        } catch (err) {
+            $status.text(`Connection failed: ${err.message}`).css('color', '#e74c3c').show();
+        } finally {
+            $btn.prop('disabled', false).val('Connect');
         }
     });
 
@@ -2713,9 +2736,15 @@ function setupListeners() {
     $('#charMemory_providerApiKeyReveal').off('click').on('click', function () {
         const $input = $('#charMemory_providerApiKey');
         const $icon = $(this).find('i');
+        const $btn = $(this);
+        clearTimeout($btn.data('revealTimer'));
         if ($input.attr('type') === 'password') {
             $input.attr('type', 'text');
             $icon.removeClass('fa-eye').addClass('fa-eye-slash');
+            $btn.data('revealTimer', setTimeout(() => {
+                $input.attr('type', 'password');
+                $icon.removeClass('fa-eye-slash').addClass('fa-eye');
+            }, 10000));
         } else {
             $input.attr('type', 'password');
             $icon.removeClass('fa-eye-slash').addClass('fa-eye');

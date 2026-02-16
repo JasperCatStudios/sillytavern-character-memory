@@ -1385,25 +1385,28 @@ function clearModelCache(providerKey) {
 async function testProviderConnection() {
     const providerKey = extension_settings[MODULE_NAME].selectedProvider;
     const preset = PROVIDER_PRESETS[providerKey];
+    const $status = $('#charMemory_providerTestStatus');
+
     if (!preset) {
-        toastr.error('Unknown provider selected.', 'CharMemory');
+        $status.text('Unknown provider selected.').css('color', '#e74c3c').show();
         return;
     }
 
     const providerSettings = getProviderSettings(providerKey);
     if (preset.requiresApiKey && !providerSettings.apiKey) {
-        toastr.error('Enter an API key first.', 'CharMemory');
+        $status.text('Enter an API key first.').css('color', '#e74c3c').show();
         return;
     }
 
     const $btn = $('#charMemory_providerTest');
     $btn.prop('disabled', true).val('Testing...');
+    $status.text('Testing connection...').css('color', '').show();
 
     try {
         const baseUrl = resolveBaseUrl(preset, providerSettings);
         const testModel = providerSettings.model || preset.defaultModel;
         if (!testModel) {
-            toastr.warning('Select a model first, then test.', 'CharMemory');
+            $status.text('Select a model first, then test.').css('color', '#e67e22').show();
             return;
         }
         const testMessages = [{ role: 'user', content: 'Say OK' }];
@@ -1415,16 +1418,12 @@ async function testProviderConnection() {
         }
 
         logActivity(`${preset.name} connection test successful`, 'success');
-        toastr.success('Connection successful!', 'CharMemory');
-        $btn.val('\u2714 OK');
-        setTimeout(() => $btn.val('Test'), 3000);
+        $status.text('\u2714 Connected OK').css('color', '#2ecc71').show();
     } catch (err) {
         logActivity(`${preset.name} connection test failed: ${err.message}`, 'error');
-        toastr.error(err.message || 'Connection failed. Check Activity Log for details.', 'CharMemory');
-        $btn.val('\u2718 Fail');
-        setTimeout(() => $btn.val('Test'), 3000);
+        $status.text(`\u2718 ${err.message || 'Connection failed'}`).css('color', '#e74c3c').show();
     } finally {
-        $btn.prop('disabled', false);
+        $btn.prop('disabled', false).val('Test');
     }
 }
 

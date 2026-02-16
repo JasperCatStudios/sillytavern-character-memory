@@ -23,10 +23,23 @@ In short: your character remembers things that happened even in very old convers
    ```
    https://github.com/bal-spec/sillytavern-character-memory
    ```
-5. Click **Save** and wait for the installation to complete
+5. Click **Install just for me** and wait for the installation to complete
+
+![Install extension dialog — paste the GitHub URL and click Install](images/02-install-dialog.png)
+
 6. Scroll down in the Extensions panel — you should see **Character Memory** at the bottom
 
-You'll see the CharMemory panel with a stats bar showing the memory file name, memory count, extraction progress, and status. Automatic extraction is enabled by default.
+### Recommended: Turn on Message IDs
+
+Before you start chatting, enable **Message IDs** in SillyTavern. This shows a sequential number on each message in the chat, which is helpful when using CharMemory because:
+
+- The Activity Log references message indices (e.g., "Collected 15 messages (indices 0-14)")
+- The "Extract Here" button processes up to a specific message index
+- Diagnostics show `lastExtractedIndex`, so you can see exactly which messages have been processed
+
+To enable: click the **User Settings** icon (the person silhouette at the top) → scroll to the checkboxes in the UI section → check **Message IDs**.
+
+![User Settings — check "Message IDs" in the UI options](images/03-message-ids.png)
 
 ## Step 2: Choose an Extraction Provider
 
@@ -50,6 +63,8 @@ You have three options for **LLM Provider**:
 4. Click **Test** to verify the connection works
 5. Select a **Model** from the dropdown
 
+![CharMemory Settings — API Provider with NanoGPT, model selection, and auto-extraction sliders](images/04-settings-provider.png)
+
 If you're not sure which model to use, see the [Recommended Models](#recommended-models) section below.
 
 ### If you just want to get started quickly
@@ -62,6 +77,15 @@ That's it for basic setup. Now just chat with a character as you normally would.
 
 As you chat, watch the **stats bar** at the top of the CharMemory panel. You'll see the extraction progress counter tick up with each character message (e.g., "5/20 msgs"). When the counter reaches the threshold (default: 20 messages), CharMemory will automatically extract memories from the conversation.
 
+![The stats bar shows the memory file, count, extraction progress, and cooldown status](images/05-stats-bar.png)
+
+### What the Stats Bar Shows
+
+- **File name**: The memory file for the current character (e.g., `Flux_the_Cat-memories.md`)
+- **Memory count**: Total individual memory bullets stored
+- **Progress**: Messages since last extraction vs. the auto-extract threshold (e.g., "1/20 msgs")
+- **Status**: "Ready" when extraction can fire, or a cooldown timer
+
 ### Your First Extraction
 
 You don't have to wait for the auto-extraction. To run an extraction right away:
@@ -71,24 +95,17 @@ You don't have to wait for the auto-extraction. To run an extraction right away:
 3. After a few seconds, the notification will update with how many memories were saved
 4. The stats bar will show the updated memory count
 
-### What the Stats Bar Shows
+You can follow the extraction in real time in the **Activity Log** (Tools & Diagnostics → Activity Log). It shows each step: messages collected, LLM call sent, response received, and memories saved.
 
-- **File name**: The memory file for the current character (e.g., `Flux_the_Cat-memories.md`)
-- **Memory count**: Total individual memory bullets stored
-- **Progress**: Messages since last extraction vs. the auto-extract threshold (e.g., "12/20 msgs")
-- **Status**: "Ready" when extraction can fire, or a cooldown timer
+![Activity Log showing a successful extraction — 15 messages collected, 7 memories saved](images/08-activity-log.png)
 
 ## Step 4: View Your Memories
 
-Click **View / Edit** to open the Memory Manager. Your extracted memories appear as cards grouped by extraction, showing the chat name and timestamp. Each card contains bullet-point memories like:
+Click **View / Edit** to open the Memory Manager. Your extracted memories appear as cards grouped by extraction, showing the chat name and timestamp. Each bullet has its own edit and delete buttons.
 
-```
-- Alex offered Flux tuna on the first morning, placing the dish on the floor.
-- Flux accepted the treat from Alex's open palm, showing growing trust.
-- Flux discovered pigeons on the balcony and became obsessed with watching them.
-```
+![Memory Manager showing 7 extracted memories with edit and delete controls](images/06-memory-manager.png)
 
-You can **edit** or **delete** individual bullets directly from this view.
+You can **edit** any bullet to refine its wording, or **delete** bullets that aren't useful. If a block becomes empty after deleting all its bullets, it's removed entirely.
 
 ## Step 5: Set Up Vector Storage
 
@@ -99,29 +116,33 @@ Without Vector Storage, memories are stored but never injected into the LLM's co
 ### Enable Vector Storage
 
 1. In the **Extensions** panel, find **Vector Storage** and expand it
-2. Check **Enabled for files (Data Bank)** — this is the critical setting. CharMemory stores memories as Data Bank files, so this must be on.
-3. Choose an **Embedding Source**. The simplest option is **Transformers** (runs locally in your browser, no API key needed). Other options include OpenAI, Cohere, or Ollama if you prefer external embeddings.
+2. Choose a **Vectorization Source**. The simplest option is **Local (Transformers)** — runs in your browser, no API key needed.
+3. Under **File vectorization settings**, check **Enable for files** — this is the critical setting. CharMemory stores memories as Data Bank files, so this must be on.
+4. Configure the **Data Bank files** settings as shown below
 
-### Recommended Vector Storage Settings for Memories
+![Vector Storage settings — Transformers source, Enable for files checked, Data Bank settings configured](images/07-vector-storage.png)
 
-These settings are found in the Vector Storage extension panel under the **Data Bank** section (not the chat message section):
+### Recommended Vector Storage Settings
+
+The Vector Storage panel has two rows of file settings: **Message attachments** (top) and **Data Bank files** (bottom). CharMemory uses the Data Bank, so focus on the bottom row:
 
 | Setting | Recommended | Why |
 |---------|-------------|-----|
-| **Chunk size** | 2500–3000 chars | Large enough to keep `<memory>` blocks together without splitting them |
-| **Chunk overlap** | 10–20% | Prevents chunk boundaries from cutting through the middle of a memory block |
-| **Retrieve chunks** | 5–10 | How many memory chunks are retrieved per generation. Too low and the character misses relevant memories. Too high (e.g., 40+) and you're dumping the entire file, which defeats semantic search. |
-| **Score threshold** | 0.2–0.25 | How similar a memory must be to the current conversation to be retrieved. The default is fine. |
+| **Size threshold** | 1 KB | Controls when chunking kicks in. Below this size, the whole file gets one embedding. At 1 KB (~5-10 memory bullets), individual chunks start getting their own vectors so Vector Storage can retrieve *specific* relevant memories instead of the whole file as a blob. |
+| **Chunk size** | 3000 chars | A `<memory>` block with 8 bullets is roughly 500-1500 chars. 3000 keeps 1-2 full blocks per chunk without splitting them mid-sentence. Too small and blocks get cut in half. Too large and you lose retrieval granularity. |
+| **Chunk overlap** | 15% | ~450 chars of overlap at 3000 chunk size. Catches memory blocks that straddle a chunk boundary. Without overlap, a block landing exactly on the split gets half in one chunk and half in another, making neither retrievable cleanly. |
+| **Retrieve chunks** | 5 | How many memory chunks are retrieved per generation. At ~2 blocks per chunk, that's roughly 10 memory blocks — enough context without flooding the prompt. Going too high (20+) effectively dumps the whole file, defeating the purpose of semantic search. |
 
 ### Verify It's Working
 
 After extracting some memories and chatting further:
 
 1. Open CharMemory's **Tools & Diagnostics** section
-2. Click the **Diagnostics** tab
-3. Click **Refresh**
-4. Check **Vectorization** — it should say "Yes" with a chunk count
-5. Check **Injected Memories — Last Generation** — after your next message, this will show which specific memories were retrieved and sent to the LLM
+2. Click the **Diagnostics** tab, then **Refresh**
+3. Check **Vectorization** — it should say "Yes" with a chunk count
+4. Check **Injected Memories — Last Generation** — after your next message, this will show which specific memories were retrieved and sent to the LLM
+
+![Diagnostics showing memory count, vectorization status, last extraction result, and character lorebooks](images/09-diagnostics.png)
 
 If "Injected Memories" says "No memory chunks injected yet (generate a message first)", send another message to the character and refresh diagnostics again. The memories are retrieved at generation time, so you need at least one exchange after vectorization for them to appear.
 
@@ -194,7 +215,7 @@ Memory extraction is a structured task — the LLM needs to follow instructions 
 
 **"0 memories" after extraction**: Check the Activity Log (Tools & Diagnostics → Activity Log). It shows exactly what happened — whether the LLM returned NO_NEW_MEMORIES, produced unparseable output, or encountered an error. Enable **Verbose** mode to see the full prompt and response.
 
-**Memories extracted but character doesn't use them**: Vector Storage isn't set up, or "Enabled for files (Data Bank)" isn't checked. Open Diagnostics and verify the Vectorization line shows "Yes" and that Injected Memories shows entries after generating a message.
+**Memories extracted but character doesn't use them**: Vector Storage isn't set up, or "Enable for files" isn't checked. Open Diagnostics and verify the Vectorization line shows "Yes" and that Injected Memories shows entries after generating a message.
 
 **Extraction never fires automatically**: Check that "Enable automatic extraction" is checked, the message counter is actually incrementing (visible in the stats bar), and the cooldown timer isn't blocking it.
 

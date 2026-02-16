@@ -1124,7 +1124,7 @@ async function generateOpenAICompatibleResponse(baseUrl, apiKey, model, messages
     if (preset.useProxy) {
         const response = await fetch('/api/backends/chat-completions/generate', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: getRequestHeaders(),
             body: JSON.stringify({
                 chat_completion_source: 'custom',
                 custom_url: baseUrl,
@@ -1331,7 +1331,7 @@ async function fetchProviderModels(providerKey) {
     if (preset.useProxy) {
         const response = await fetch('/api/backends/chat-completions/status', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: getRequestHeaders(),
             body: JSON.stringify({
                 chat_completion_source: 'custom',
                 custom_url: baseUrl,
@@ -2601,6 +2601,7 @@ function setupListeners() {
     $('#charMemory_providerSelect').off('change').on('change', function () {
         extension_settings[MODULE_NAME].selectedProvider = String($(this).val());
         saveSettingsDebounced();
+        $('#charMemory_providerTestStatus').hide().text('');
         updateProviderUI();
     });
 

@@ -71,7 +71,7 @@ You have three options for **LLM Used for Extraction**:
 
 #### Setting up Dedicated API
 
-Dedicated API is the default and recommended option. It sends a focused extraction prompt directly to an LLM without any of the chat's system prompts, character cards, or other instructions getting mixed in. This produces noticeably better memories.
+Dedicated API is the default and recommended option. It sends *only* the extraction prompt to the LLM — no chat system prompts, jailbreaks, persona instructions, or other context gets mixed in. (The extraction prompt itself includes the character card as a bounded reference section so the LLM knows what not to re-extract — but that's intentional and controlled, unlike Main LLM where everything piles up.) This produces noticeably better memories.
 
 1. Open **Settings** in the CharMemory panel — **Dedicated API** is already selected
 2. Choose a **Provider** from the dropdown. Options include OpenAI, Anthropic, OpenRouter, Groq, DeepSeek, Mistral, NanoGPT, Ollama, and others.
@@ -154,61 +154,7 @@ The Vector Storage panel has two rows of file settings: **Message attachments** 
 
 #### Verify It's Working
 
-After extracting some memories and chatting further:
-
-1. Open CharMemory's **Tools & Diagnostics** section
-2. Click the **Diagnostics** tab, then **Refresh**
-3. Check **Vectorization** — it should say "Yes" with a chunk count
-4. Check **Injected Memories — Last Generation** — after your next message, this will show which specific memories were retrieved and sent to the LLM
-
-If "Injected Memories" says "No memory chunks injected yet (generate a message first)", send another message to the character and refresh diagnostics again. The memories are retrieved at generation time, so you need at least one exchange after vectorization for them to appear.
-
----
-
-## Understanding the Extraction Settings
-
-Once you're up and running, you may want to tune how often and how extraction happens. Open **Settings** in the CharMemory panel.
-
-### Auto-Extraction Timing
-
-Two sliders control when automatic extraction fires:
-
-**Extract after every N messages** (default: 20, range: 3–100)
-How many character messages must arrive before auto-extraction triggers. A higher value gives the LLM more context per extraction, which generally produces better, more selective memories. A lower value extracts more frequently with less context.
-
-**Minimum wait between extractions** (default: 10 min, range: 0–30 min)
-A cooldown that prevents rapid-fire extractions during fast-paced chats. When the message threshold is reached, extraction only fires if this much wall-clock time has passed since the last one. If the cooldown hasn't expired, extraction is skipped (not queued) and checks again on each subsequent message. Messages keep accumulating during the cooldown, so when it finally fires, it processes everything that piled up.
-
-These two settings **only affect automatic extraction**. Manual "Extract Now", per-message "Extract Here", and batch extraction always run immediately.
-
-### Extraction Quality
-
-**Messages per LLM call** (default: 50, range: 10–200)
-Controls how many messages are sent to the LLM in a single extraction call. If there are more unprocessed messages than this, extraction loops through them in chunks. Larger chunks give the LLM more context per call and produce better memories. The default of 50 is a good balance.
-
-In the common auto-extraction case, only N messages (the interval threshold) will have accumulated, so this slider is irrelevant — the chunk size only kicks in when messages pile up beyond the interval, during manual extraction of long chats, or during batch extraction.
-
-We arrived at the default of 50 through testing with several models. Setting this too low (e.g., 10-15) gave the LLM too little context — it would extract trivial details because there wasn't enough conversation to judge what was significant. Setting it too high (150+) didn't improve quality and increased token costs. 50 messages gives the LLM a solid window of conversation to work with while keeping costs reasonable.
-
-The auto-extraction interval (default: 20) was similarly tested. At 10, extractions were too frequent with too little context per call. At 20, the LLM has enough conversation to produce meaningful, selective memories without waiting too long between extractions.
-
-**Max response length** (default: 1000 tokens, range: 100–2000)
-Token limit for the LLM's response per chunk. Increase this if extractions seem truncated. Most models produce well-formed output within 1000 tokens.
-
-### How the Settings Interact
-
-The three main sliders — **Extract after every N messages** (interval), **Minimum wait between extractions** (cooldown), and **Messages per LLM call** (chunk size) — work together:
-
-**Interval and chunk size.** The extension tracks a `lastExtractedIndex` watermark. Each message is only ever sent to the LLM once — there is no overlap between extractions. When auto-extraction fires after N messages, only those N unprocessed messages are sent, even if the chunk size is larger. This means that with the defaults (interval=20, chunk size=50), each auto-extraction sends exactly 20 messages to the LLM. The chunk size only becomes relevant when more messages accumulate than the interval — for example, during manual "Extract Now" after a long chat, batch extraction, or when the cooldown delayed auto-extraction and messages piled up.
-
-**Why the interval matters for quality.** A higher interval gives the LLM more messages per extraction, which means more context to judge what's significant. With only 10 messages, the LLM has little to work with and may extract minor details. With 20–50 messages, it can better identify meaningful developments and skip filler.
-
-**How cooldown works.** When the message counter hits the interval threshold, the extension checks whether enough wall-clock time has passed since the last extraction. If not, extraction is **skipped** (not queued). The counter stays above the threshold, so it checks again on each subsequent message until the cooldown expires. During this time, messages keep accumulating. When extraction finally fires, it processes everything that piled up — potentially sending more than N messages and using the chunk size to split them into multiple LLM calls.
-
-**Practical examples:**
-- *Fast chat, defaults (interval=20, cooldown=10min):* 20 messages arrive in 3 minutes. Extraction wants to fire but cooldown blocks it. By the time 10 minutes pass, 60 messages have accumulated. Extraction fires and processes all 60 in two chunks of 50 and 10.
-- *Leisurely chat, defaults:* 20 messages arrive over 45 minutes. Cooldown is long expired. Extraction fires immediately and processes 20 messages in one call. The chunk size is irrelevant.
-- *High interval (interval=50, cooldown=0):* Extraction fires every 50 messages with no time gate. Each extraction has rich context and produces higher-quality, more selective memories.
+After extracting some memories and chatting further, use the [Diagnostics](#using-diagnostics) tab to verify memories are being vectorized and injected. See the Diagnostics section below for details.
 
 ---
 
@@ -221,82 +167,6 @@ Runs LLM-based extraction on all unprocessed messages up to and including this o
 
 **Pin as Memory** (bookmark icon, all messages)
 Manually saves a message as a memory with no LLM involved. Opens an edit dialog pre-filled with the message text so you can rewrite it however you want before saving. Each line becomes a memory bullet. Use this when you want to remember something specific exactly as you phrase it.
-
----
-
-## Memory File Format
-
-CharMemory stores memories as plain markdown files in the character's Data Bank. Understanding the file format is useful if you want to edit memories manually, migrate existing files, or troubleshoot.
-
-### Structure
-
-Each extraction produces a `<memory>` block with chat attribution and timestamped bullet points:
-
-```
-<memory chat="2026-02-15@10h00m00s" date="2026-02-15 14:30">
-- Alex mentioned they work from home as a freelance designer.
-- Flux knocked a coffee mug off the desk and showed no remorse.
-- Alex adopted Flux from a rescue shelter two years ago.
-</memory>
-
-<memory chat="2026-02-15@10h00m00s" date="2026-02-15 15:45">
-- Alex discovered Flux has been hiding treats behind the couch cushions.
-- Flux rode the Roomba around the apartment for the first time.
-</memory>
-```
-
-**Key details:**
-- Each block is wrapped in `<memory>` tags with `chat` (the chat filename) and `date` (extraction timestamp) attributes
-- Bullets start with `- ` (dash space) — this is the only recognized format
-- Multiple blocks from the same chat are automatically merged by the extension
-- The file is append-only during normal operation — new extractions add blocks at the end
-- Old files using the `## Memory N` heading format are auto-migrated on first read
-
-### Working with Existing Memory Files
-
-If you already have memory files in the Data Bank from manual notes or another tool, they need to be in the `<memory>` block format for CharMemory to recognize them. Convert freeform text by wrapping it:
-
-```
-<memory chat="imported" date="2026-01-01">
-- First memory bullet
-- Second memory bullet
-</memory>
-```
-
-Any text outside `<memory>` blocks is ignored by the Memory Manager and won't appear in diagnostics. It won't cause errors, but it also won't be managed by CharMemory.
-
-After converting existing files or making manual edits, **purge vectors and revectorize** the file in Vector Storage so the index reflects the updated content. Vector Storage doesn't incrementally update — it re-chunks and re-embeds the entire file from scratch when you revectorize.
-
----
-
-## Recommended Models
-
-Memory extraction is a structured task — the LLM needs to follow instructions precisely, distinguish between existing and new content, and produce well-formatted output. Not all models are equally good at this.
-
-### What matters most
-
-1. **Instruction following**: The LLM must respect the AVOID list, past-tense requirement, and the boundary between existing memories and new chat content. Weaker models blur these boundaries and contaminate new extractions with rephrased existing memories.
-2. **Factual accuracy**: The LLM must not reverse actions (e.g., "A did X to B" when B did X to A) or hallucinate events.
-3. **Structured output**: The LLM must produce well-formed `<memory>` blocks with bulleted lists. Models that struggle with formatting produce unparseable output.
-
-### Good choices
-
-| Model | Notes |
-|-------|-------|
-| **GLM 4.7** | Best quality and fastest. Concise, significant memories. Recommended first choice. |
-| **DeepSeek V3.1 / V3.2** | Good instruction following. Solid second choice. |
-| **Mistral Large 3** | Good quality, sometimes verbose. |
-| **GPT-4.1 nano / mini** | Reliable instruction following at low cost. |
-| **Hermes 4 (405B)** | Good with roleplay-adjacent content, won't refuse. |
-
-### Models to avoid
-
-| Model | Issue |
-|-------|-------|
-| **Qwen3-235B** | Tends toward compressed play-by-play even with the improved prompt. |
-| **Reasoning/Thinking variants** | Slower and more expensive with no benefit for extraction. |
-| **Very small models** | May reverse who did what or blur the boundary between existing and new memories. |
-| **Heavily censored models** | May refuse to extract from mature content, returning nothing even when there are real events to capture. |
 
 ---
 
@@ -322,26 +192,6 @@ Two reset options are available in Settings:
 **Reset Extraction State** resets the extraction tracking for the current character — both the active chat and all batch extraction state. After resetting, the extension treats all messages as unprocessed. This is useful when you want to re-extract from the beginning, perhaps after changing the extraction prompt or switching to a better model. It does **not** delete any memories.
 
 **Clear All Memories** deletes the memory file and resets all extraction tracking. In default mode (not per-chat), the memory file contains memories from **all** of that character's chats, so this clears everything. This cannot be undone.
-
-### The Extraction Prompt
-
-The extraction prompt is the core of what makes CharMemory produce useful memories rather than a play-by-play transcript. You can view and edit it in Settings → Extraction Prompt, and a **Restore Default** button lets you start over.
-
-The default prompt was developed through extensive testing across multiple models and character types. Here's what it does and why:
-
-**Three-section input structure.** The prompt gives the LLM three clearly bounded sections: the character card (baseline knowledge), existing memories (already recorded), and recent chat messages (what to extract from). Each section has explicit `=====` boundary markers and instructions about what to do with it — extract only from recent messages, don't repeat existing memories, and don't re-state character card traits.
-
-**Why the character card is included.** Early versions without the card produced memories that re-extracted baseline traits. If a character's card says "she's a doctor," the LLM would extract "she works in medicine" from every chat where it came up. Including the card as "baseline knowledge — do NOT extract" dramatically reduced this.
-
-**The "would they bring this up months later?" test.** The prompt asks the LLM to evaluate each potential memory against this question. This pushes models toward significant, lasting facts and away from moment-by-moment details.
-
-**Hard 8-bullet limit.** Without a cap, most models produce 15-20 bullets per extraction — far too granular. The 8-bullet limit forces the LLM to prioritize. If a conversation doesn't contain 8 significant things, the LLM can return fewer.
-
-**Negative and positive examples.** The prompt includes a bad example (step-by-step play-by-play of a scene) and a good example (the same scene condensed to 2 bullets capturing outcomes). This was the single most effective change for reducing play-by-play extraction, which was the most common quality problem across models.
-
-**"Write what happened, not that it was discussed."** Models tend to write meta-narration like "she told him about her childhood" instead of the actual fact "she grew up in a coastal village." The prompt explicitly addresses this pattern.
-
-If you customize the prompt, keep the three-section structure and boundary markers intact — models rely on these to understand what to extract from and what to skip.
 
 ### Consolidation
 
@@ -392,6 +242,151 @@ Click **Refresh** after generating a message to capture the current state.
 ### Why Memories and Lorebooks Both Appear
 
 CharMemory's diagnostics shows both memories and lorebooks because they're the two main sources of supplemental character context that get injected alongside the conversation. When debugging "the character doesn't remember X" or "the character is acting strangely," the answer often involves the interaction between these sources — not just one in isolation. The diagnostics panel gives you a single place to inspect everything the LLM saw beyond the chat messages themselves.
+
+---
+
+## Understanding the Extraction Settings
+
+Once you're up and running, you may want to tune how often and how extraction happens. Open **Settings** in the CharMemory panel.
+
+### Auto-Extraction Timing
+
+Two sliders control when automatic extraction fires:
+
+**Extract after every N messages** (default: 20, range: 3–100)
+How many character messages must arrive before auto-extraction triggers. A higher value gives the LLM more context per extraction, which generally produces better, more selective memories. A lower value extracts more frequently with less context.
+
+**Minimum wait between extractions** (default: 10 min, range: 0–30 min)
+A cooldown that prevents rapid-fire extractions during fast-paced chats. When the message threshold is reached, extraction only fires if this much wall-clock time has passed since the last one. If the cooldown hasn't expired, extraction is skipped (not queued) and checks again on each subsequent message. Messages keep accumulating during the cooldown, so when it finally fires, it processes everything that piled up.
+
+These two settings **only affect automatic extraction**. Manual "Extract Now", per-message "Extract Here", and batch extraction always run immediately.
+
+### Extraction Quality
+
+**Messages per LLM call** (default: 50, range: 10–200)
+Controls how many messages are sent to the LLM in a single extraction call. If there are more unprocessed messages than this, extraction loops through them in chunks. Larger chunks give the LLM more context per call and produce better memories. The default of 50 is a good balance.
+
+In the common auto-extraction case, only N messages (the interval threshold) will have accumulated, so this slider is irrelevant — the chunk size only kicks in when messages pile up beyond the interval, during manual extraction of long chats, or during batch extraction.
+
+We arrived at the default of 50 through testing with several models. Setting this too low (e.g., 10-15) gave the LLM too little context — it would extract trivial details because there wasn't enough conversation to judge what was significant. Setting it too high (150+) didn't improve quality and increased token costs. 50 messages gives the LLM a solid window of conversation to work with while keeping costs reasonable.
+
+The auto-extraction interval (default: 20) was similarly tested. At 10, extractions were too frequent with too little context per call. At 20, the LLM has enough conversation to produce meaningful, selective memories without waiting too long between extractions.
+
+**Max response length** (default: 1000 tokens, range: 100–2000)
+Token limit for the LLM's response per chunk. Increase this if extractions seem truncated. Most models produce well-formed output within 1000 tokens.
+
+### How the Settings Interact
+
+The three main sliders — **Extract after every N messages** (interval), **Minimum wait between extractions** (cooldown), and **Messages per LLM call** (chunk size) — work together:
+
+**Interval and chunk size.** The extension tracks a `lastExtractedIndex` watermark. Each message is only ever sent to the LLM once — there is no overlap between extractions. When auto-extraction fires after N messages, only those N unprocessed messages are sent, even if the chunk size is larger. This means that with the defaults (interval=20, chunk size=50), each auto-extraction sends exactly 20 messages to the LLM. The chunk size only becomes relevant when more messages accumulate than the interval — for example, during manual "Extract Now" after a long chat, batch extraction, or when the cooldown delayed auto-extraction and messages piled up.
+
+**Why the interval matters for quality.** A higher interval gives the LLM more messages per extraction, which means more context to judge what's significant. With only 10 messages, the LLM has little to work with and may extract minor details. With 20–50 messages, it can better identify meaningful developments and skip filler.
+
+**How cooldown works.** When the message counter hits the interval threshold, the extension checks whether enough wall-clock time has passed since the last extraction. If not, extraction is **skipped** (not queued). The counter stays above the threshold, so it checks again on each subsequent message until the cooldown expires. During this time, messages keep accumulating. When extraction finally fires, it processes everything that piled up — potentially sending more than N messages and using the chunk size to split them into multiple LLM calls.
+
+**Practical examples:**
+- *Fast chat, defaults (interval=20, cooldown=10min):* 20 messages arrive in 3 minutes. Extraction wants to fire but cooldown blocks it. By the time 10 minutes pass, 60 messages have accumulated. Extraction fires and processes all 60 in two chunks of 50 and 10.
+- *Leisurely chat, defaults:* 20 messages arrive over 45 minutes. Cooldown is long expired. Extraction fires immediately and processes 20 messages in one call. The chunk size is irrelevant.
+- *High interval (interval=50, cooldown=0):* Extraction fires every 50 messages with no time gate. Each extraction has rich context and produces higher-quality, more selective memories.
+
+---
+
+## The Extraction Prompt
+
+The extraction prompt is the core of what makes CharMemory produce useful memories rather than a play-by-play transcript. You can view and edit it in Settings → Extraction Prompt, and a **Restore Default** button lets you start over.
+
+The default prompt was developed through extensive testing across multiple models and character types. Here's what it does and why:
+
+**Three-section input structure.** The prompt gives the LLM three clearly bounded sections: the character card (baseline knowledge), existing memories (already recorded), and recent chat messages (what to extract from). Each section has explicit `=====` boundary markers and instructions about what to do with it — extract only from recent messages, don't repeat existing memories, and don't re-state character card traits.
+
+**Why the character card is included.** Early versions without the card produced memories that re-extracted baseline traits. If a character's card says "she's a doctor," the LLM would extract "she works in medicine" from every chat where it came up. Including the card as "baseline knowledge — do NOT extract" dramatically reduced this.
+
+**The "would they bring this up months later?" test.** The prompt asks the LLM to evaluate each potential memory against this question. This pushes models toward significant, lasting facts and away from moment-by-moment details.
+
+**Hard 8-bullet limit.** Without a cap, most models produce 15-20 bullets per extraction — far too granular. The 8-bullet limit forces the LLM to prioritize. If a conversation doesn't contain 8 significant things, the LLM can return fewer.
+
+**Negative and positive examples.** The prompt includes a bad example (step-by-step play-by-play of a scene) and a good example (the same scene condensed to 2 bullets capturing outcomes). This was the single most effective change for reducing play-by-play extraction, which was the most common quality problem across models.
+
+**"Write what happened, not that it was discussed."** Models tend to write meta-narration like "she told him about her childhood" instead of the actual fact "she grew up in a coastal village." The prompt explicitly addresses this pattern.
+
+If you customize the prompt, keep the three-section structure and boundary markers intact — models rely on these to understand what to extract from and what to skip.
+
+---
+
+## Recommended Models
+
+Memory extraction is a structured task — the LLM needs to follow instructions precisely, distinguish between existing and new content, and produce well-formatted output. Not all models are equally good at this.
+
+### What matters most
+
+1. **Instruction following**: The LLM must respect the AVOID list, past-tense requirement, and the boundary between existing memories and new chat content. Weaker models blur these boundaries and contaminate new extractions with rephrased existing memories.
+2. **Factual accuracy**: The LLM must not reverse actions (e.g., "A did X to B" when B did X to A) or hallucinate events.
+3. **Structured output**: The LLM must produce well-formed `<memory>` blocks with bulleted lists. Models that struggle with formatting produce unparseable output.
+
+### Good choices
+
+| Model | Notes |
+|-------|-------|
+| **GLM 4.7** | Best quality and fastest. Concise, significant memories. Recommended first choice. |
+| **DeepSeek V3.1 / V3.2** | Good instruction following. Solid second choice. |
+| **Mistral Large 3** | Good quality, sometimes verbose. |
+| **GPT-4.1 nano / mini** | Reliable instruction following at low cost. |
+| **Hermes 4 (405B)** | Good with roleplay-adjacent content, won't refuse. |
+
+### Models to avoid
+
+| Model | Issue |
+|-------|-------|
+| **Qwen3-235B** | Tends toward compressed play-by-play even with the improved prompt. |
+| **Reasoning/Thinking variants** | Slower and more expensive with no benefit for extraction. |
+| **Very small models** | May reverse who did what or blur the boundary between existing and new memories. |
+| **Heavily censored models** | May refuse to extract from mature content, returning nothing even when there are real events to capture. |
+
+---
+
+## Memory File Format
+
+CharMemory stores memories as plain markdown files in the character's Data Bank. Understanding the file format is useful if you want to edit memories manually, migrate existing files, or troubleshoot.
+
+### Structure
+
+Each extraction produces a `<memory>` block with chat attribution and timestamped bullet points:
+
+```
+<memory chat="2026-02-15@10h00m00s" date="2026-02-15 14:30">
+- Alex mentioned they work from home as a freelance designer.
+- Flux knocked a coffee mug off the desk and showed no remorse.
+- Alex adopted Flux from a rescue shelter two years ago.
+</memory>
+
+<memory chat="2026-02-15@10h00m00s" date="2026-02-15 15:45">
+- Alex discovered Flux has been hiding treats behind the couch cushions.
+- Flux rode the Roomba around the apartment for the first time.
+</memory>
+```
+
+**Key details:**
+- Each block is wrapped in `<memory>` tags with `chat` (the chat filename) and `date` (extraction timestamp) attributes
+- Bullets start with `- ` (dash space) — this is the only recognized format
+- Multiple blocks from the same chat are automatically merged by the extension
+- The file is append-only during normal operation — new extractions add blocks at the end
+- Old files using the `## Memory N` heading format are auto-migrated on first read
+
+### Working with Existing Memory Files
+
+If you already have memory files in the Data Bank from manual notes or another tool, they need to be in the `<memory>` block format for CharMemory to recognize them. Convert freeform text by wrapping it:
+
+```
+<memory chat="imported" date="2026-01-01">
+- First memory bullet
+- Second memory bullet
+</memory>
+```
+
+Any text outside `<memory>` blocks is ignored by the Memory Manager and won't appear in diagnostics. It won't cause errors, but it also won't be managed by CharMemory.
+
+After converting existing files or making manual edits, **purge vectors and revectorize** the file in Vector Storage so the index reflects the updated content. Vector Storage doesn't incrementally update — it re-chunks and re-embeds the entire file from scratch when you revectorize.
 
 ---
 

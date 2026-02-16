@@ -287,7 +287,7 @@ const PROVIDER_PRESETS = {
 
 const defaultSettings = {
     enabled: true,
-    interval: 10,
+    interval: 20,
     maxMessagesPerExtraction: 50,
     responseLength: 1000,
     extractionPrompt: defaultExtractionPrompt,

@@ -2,6 +2,8 @@
 
 Automatically extracts structured character memories from chat and stores them in character-scoped Data Bank files. Memories are vectorized by SillyTavern's existing Vector Storage for retrieval at generation time.
 
+**New here?** See the **[Getting Started Guide](GETTING-STARTED.md)** for step-by-step setup instructions.
+
 ## What It Does
 
 ```
@@ -13,7 +15,7 @@ Chat happens (every N character messages)
     → Relevant memories retrieved at generation time
 ```
 
-- **Automatic**: Extracts memories every N character messages (configurable, default 10) with cooldown to prevent rapid-fire
+- **Automatic**: Extracts memories every N character messages (configurable, default 20) with cooldown to prevent rapid-fire
 - **Chunked**: Loops through all unprocessed messages in chunks — no messages are silently skipped
 - **Batch extraction**: Extract memories from all (or selected) chats for a character, not just the active one
 - **Visible**: Memories stored as a plain markdown file in character Data Bank — fully viewable and editable
@@ -57,7 +59,7 @@ Restart SillyTavern after installation.
 The stats bar at the top of the extension panel shows:
 - **File name**: The active memory file for the current character
 - **Memory count**: Total number of individual memory bullets stored
-- **Extraction progress**: New messages since last extraction vs. the auto-extract threshold (e.g., "7/10 msgs")
+- **Extraction progress**: New messages since last extraction vs. the auto-extract threshold (e.g., "12/20 msgs")
 - **Cooldown timer**: Time remaining before the next auto-extraction is allowed, or "Ready"
 
 ### Memory Manager
@@ -69,12 +71,11 @@ Click **View / Edit** to open the Memory Manager. Memories are displayed as grou
 
 ### Per-Message Buttons
 
-Each message in the chat gets additional buttons in its action bar (visible on hover):
+Each message in the chat gets additional buttons in its action bar (visible on hover). These appear on all messages, including those that were already in the chat when it loaded.
 
-- **Extract Here** (brain icon, character messages only): Run memory extraction on all messages up to and including this one. Useful for extracting from specific parts of a long chat.
-- **Pin as Memory** (bookmark icon, all messages): Manually save a message's text as a memory, with an edit dialog before saving
+**Extract Here** (brain icon, character messages only): Runs LLM-based memory extraction on all unprocessed messages up to and including this one. Useful for extracting from a specific point in a long chat without waiting for the auto-extraction interval. Uses the same extraction prompt, chunk size, and provider settings as auto-extraction.
 
-These buttons appear on all messages, including those that were already in the chat when it loaded.
+**Pin as Memory** (bookmark icon, all messages): Manually saves a message as a memory — no LLM involved. Clicking it opens an edit dialog pre-filled with the message text (HTML stripped). You can rewrite the text into whatever form you want before saving. Each line becomes a memory bullet. The result is appended directly to the Data Bank file as a `<memory>` block with the current chat ID and timestamp. Use this when you want to remember something specific exactly as you phrase it, without relying on the LLM to extract it.
 
 ### Batch Extraction
 
@@ -124,19 +125,34 @@ Settings are organized in the **Settings** drawer:
 
 #### Auto-Extraction
 
-| Setting | Default | Description |
-|---------|---------|-------------|
-| Extract after every N messages | 10 | How many new messages trigger an automatic extraction |
-| Minimum wait between extractions | 10 min | Minimum time between auto-extractions (manual Extract Now bypasses this) |
+| Setting | Default | Range | Description |
+|---------|---------|-------|-------------|
+| Extract after every N messages | 20 | 3–100 | How many new character messages trigger an automatic extraction |
+| Minimum wait between extractions | 10 min | 0–30 min | Minimum wall-clock time between auto-extractions |
 
-These only affect automatic extraction. Manual extraction and batch extraction ignore them.
+These only affect automatic extraction. Manual extraction, per-message "Extract Here", and batch extraction ignore them.
 
 #### Extraction Settings
 
-| Setting | Default | Description |
-|---------|---------|-------------|
-| Messages per LLM call | 50 | How many messages to include in each LLM call. The system loops through all unprocessed messages in chunks of this size. |
-| Max response length | 1000 | Token limit for LLM extraction response per chunk |
+| Setting | Default | Range | Description |
+|---------|---------|-------|-------------|
+| Messages per LLM call | 50 | 10–200 | How many messages to include in each LLM call (chunk size) |
+| Max response length | 1000 | 100–2000 | Token limit for LLM extraction response per chunk |
+
+#### How the extraction settings interact
+
+The three main sliders — **Extract after every N messages** (interval), **Minimum wait between extractions** (cooldown), and **Messages per LLM call** (chunk size) — work together:
+
+**Interval and chunk size.** The extension tracks a `lastExtractedIndex` watermark. Each message is only ever sent to the LLM once — there is no overlap between extractions. When auto-extraction fires after N messages, only those N unprocessed messages are sent, even if the chunk size is larger. This means that with the defaults (interval=20, chunk size=50), each auto-extraction sends exactly 20 messages to the LLM. The chunk size only becomes relevant when more messages accumulate than the interval — for example, during manual "Extract Now" after a long chat, batch extraction, or when the cooldown delayed auto-extraction and messages piled up.
+
+**Why the interval matters for quality.** A higher interval gives the LLM more messages per extraction, which means more context to judge what's significant. With only 10 messages, the LLM has little to work with and may extract minor details. With 20–50 messages, it can better identify meaningful developments and skip filler. If you find extractions are too granular or trivial, increase the interval.
+
+**How cooldown works.** When the message counter hits the interval threshold, the extension checks whether enough wall-clock time has passed since the last extraction. If not, extraction is **skipped** (not queued). The counter stays above the threshold, so it checks again on each subsequent message until the cooldown expires. During this time, messages keep accumulating. When extraction finally fires, it processes everything that piled up — potentially sending more than N messages and using the chunk size to split them into multiple LLM calls.
+
+**Practical examples:**
+- *Fast chat, defaults (interval=20, cooldown=10min):* 20 messages arrive in 3 minutes. Extraction wants to fire but cooldown blocks it. By the time 10 minutes pass, 60 messages have accumulated. Extraction fires and processes all 60 in two chunks of 50 and 10.
+- *Leisurely chat, defaults:* 20 messages arrive over 45 minutes. Cooldown is long expired. Extraction fires immediately and processes 20 messages in one call. The chunk size is irrelevant.
+- *High interval (interval=50, cooldown=0):* Extraction fires every 50 messages with no time gate. Each extraction has rich context and produces higher-quality, more selective memories.
 
 #### Storage
 

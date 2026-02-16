@@ -2567,6 +2567,7 @@ function setupListeners() {
         extension_settings[MODULE_NAME].interval = val;
         $('#charMemory_intervalCounter').val(val);
         saveSettingsDebounced();
+        updateStatusDisplay();
     });
 
     $('#charMemory_maxMessages').off('input').on('input', function () {

@@ -1296,6 +1296,29 @@ async function fetchProviderModels(providerKey) {
     const baseUrl = resolveBaseUrl(preset, providerSettings);
     if (!baseUrl) return [];
 
+    // Route through ST server proxy if provider requires it (CORS bypass)
+    if (preset.useProxy) {
+        const response = await fetch('/api/backends/chat-completions/status', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                chat_completion_source: 'custom',
+                custom_url: baseUrl,
+                custom_include_headers: `Authorization: Bearer ${providerSettings.apiKey}`,
+            }),
+        });
+        if (!response.ok) {
+            throw new Error(`Failed to fetch models from ${preset.name}: ${response.status}`);
+        }
+        const data = await response.json();
+        const rawModels = data?.data || [];
+        const models = rawModels
+            .map(m => ({ id: m.id, name: m.id }))
+            .sort((a, b) => a.name.localeCompare(b.name));
+        modelCache[providerKey] = models;
+        return models;
+    }
+
     const headers = buildProviderHeaders(preset, providerSettings.apiKey);
     delete headers['Content-Type']; // GET request
 

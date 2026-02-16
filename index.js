@@ -55,6 +55,7 @@ let inApiCall = false;
 let lastExtractionResult = null;
 let consolidationBackup = null;
 let lastExtractionTime = 0; // session-only, resets on page load
+let apiKeyDebounceTimer = null;
 
 const CONSOLIDATION_THRESHOLD = 10;
 
@@ -585,6 +586,13 @@ async function populateProviderModels(providerKey, forceRefresh = false) {
     }
 
     const providerSettings = getProviderSettings(providerKey);
+
+    // Early exit if API key required but missing
+    if (preset.requiresApiKey && !providerSettings.apiKey) {
+        $select.empty().append('<option value="">-- Enter API key, then click ↻ --</option>');
+        $('#charMemory_providerModelInfo').text('');
+        return;
+    }
 
     try {
         if (providerKey === 'nanogpt') {
@@ -2532,9 +2540,17 @@ function setupListeners() {
     });
 
     $('#charMemory_providerApiKey').off('input').on('input', function () {
-        const providerSettings = getProviderSettings(extension_settings[MODULE_NAME].selectedProvider);
+        const providerKey = extension_settings[MODULE_NAME].selectedProvider;
+        const providerSettings = getProviderSettings(providerKey);
         providerSettings.apiKey = String($(this).val());
         saveSettingsDebounced();
+        // Auto-fetch models when key is provided
+        clearTimeout(apiKeyDebounceTimer);
+        if (providerSettings.apiKey) {
+            apiKeyDebounceTimer = setTimeout(() => {
+                populateProviderModels(providerKey, true);
+            }, 800);
+        }
     });
 
     $('#charMemory_providerModel').off('change').on('change', async function () {

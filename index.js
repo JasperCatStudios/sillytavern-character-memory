@@ -1120,6 +1120,37 @@ function resolveBaseUrl(preset, providerSettings) {
  * @returns {Promise<string>} The assistant's response content.
  */
 async function generateOpenAICompatibleResponse(baseUrl, apiKey, model, messages, maxTokens, preset) {
+    // Route through ST server proxy if provider requires it (CORS bypass)
+    if (preset.useProxy) {
+        const response = await fetch('/api/backends/chat-completions/generate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                chat_completion_source: 'custom',
+                custom_url: baseUrl,
+                custom_include_headers: `Authorization: Bearer ${apiKey}`,
+                model,
+                messages,
+                max_tokens: maxTokens,
+                temperature: 0.3,
+                stream: false,
+            }),
+        });
+
+        if (!response.ok) {
+            const presetName = preset.name || 'API';
+            let errorMsg = `${presetName} error: ${response.status}`;
+            try {
+                const errorBody = await response.json();
+                errorMsg += ` — ${errorBody.error?.message || JSON.stringify(errorBody)}`;
+            } catch { /* ignore parse error */ }
+            throw new Error(errorMsg);
+        }
+
+        const data = await response.json();
+        return data.choices?.[0]?.message?.content || '';
+    }
+
     const headers = buildProviderHeaders(preset, apiKey);
     const response = await fetch(`${baseUrl}/chat/completions`, {
         method: 'POST',

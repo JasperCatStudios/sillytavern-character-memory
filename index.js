@@ -1457,7 +1457,7 @@ async function testProviderConnection() {
 
     const $btn = $('#charMemory_providerTest');
     $btn.prop('disabled', true).val('Testing...');
-    $status.text('Testing connection...').css('color', '').show();
+    $status.text('Testing model...').css('color', '').show();
 
     try {
         const baseUrl = resolveBaseUrl(preset, providerSettings);
@@ -1466,21 +1466,31 @@ async function testProviderConnection() {
             $status.text('Select a model first, then test.').css('color', '#e67e22').show();
             return;
         }
-        const testMessages = [{ role: 'user', content: 'Say OK' }];
+        const testMessages = [{ role: 'user', content: 'Respond with exactly: CHARMMEMORY_TEST_OK' }];
 
+        const t0 = performance.now();
+        let response;
         if (preset.isAnthropic) {
-            await generateAnthropicResponse(baseUrl, providerSettings.apiKey, testModel, testMessages, 3, preset);
+            response = await generateAnthropicResponse(baseUrl, providerSettings.apiKey, testModel, testMessages, 20, preset);
         } else {
-            await generateOpenAICompatibleResponse(baseUrl, providerSettings.apiKey, testModel, testMessages, 3, preset);
+            response = await generateOpenAICompatibleResponse(baseUrl, providerSettings.apiKey, testModel, testMessages, 20, preset);
         }
+        const elapsed = ((performance.now() - t0) / 1000).toFixed(1);
+        const reply = (response || '').trim();
+        const passed = reply.includes('CHARMMEMORY_TEST_OK');
 
-        logActivity(`${preset.name} connection test successful`, 'success');
-        $status.text('\u2714 Connected OK').css('color', '#2ecc71').show();
+        logActivity(`${preset.name} model test: model=${testModel}, reply="${reply}", ${elapsed}s`, passed ? 'success' : 'warn');
+        const modelShort = testModel.length > 30 ? testModel.slice(0, 30) + '…' : testModel;
+        if (passed) {
+            $status.text(`\u2714 ${modelShort} responded correctly (${elapsed}s)`).css('color', '#2ecc71').show();
+        } else {
+            $status.html(`\u26A0 ${escapeHtml(modelShort)} responded but didn't follow the test instruction (${elapsed}s). Reply: "<b>${escapeHtml(reply.slice(0, 80))}</b>". It may still work for extraction.`).css('color', '#e67e22').show();
+        }
     } catch (err) {
-        logActivity(`${preset.name} connection test failed: ${err.message}`, 'error');
-        $status.text(`\u2718 ${err.message || 'Connection failed'}`).css('color', '#e74c3c').show();
+        logActivity(`${preset.name} model test failed: ${err.message}`, 'error');
+        $status.text(`\u2718 ${err.message || 'Test failed'}`).css('color', '#e74c3c').show();
     } finally {
-        $btn.prop('disabled', false).val('Test');
+        $btn.prop('disabled', false).val('Test Model');
     }
 }
 

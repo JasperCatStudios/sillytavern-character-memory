@@ -1152,13 +1152,16 @@ async function generateOpenAICompatibleResponse(baseUrl, apiKey, model, messages
 
         const data = await response.json();
 
+        const msg = data.choices?.[0]?.message;
+
         if (verbose) {
             if (data.error) {
                 logActivity(`Generate (proxy) HTTP ${response.status} — upstream error: ${JSON.stringify(data.error)}`, 'error');
             } else {
                 const usage = data.usage;
                 const tokens = usage ? `${usage.prompt_tokens} prompt + ${usage.completion_tokens} completion` : 'no usage data';
-                logActivity(`Generate (proxy) HTTP ${response.status}, model=${data.model || model}, finish=${data.choices?.[0]?.finish_reason || '?'}, ${tokens}`);
+                const hasReasoning = msg?.reasoning_content ? ` [reasoning: ${msg.reasoning_content.length} chars]` : '';
+                logActivity(`Generate (proxy) HTTP ${response.status}, model=${data.model || model}, finish=${data.choices?.[0]?.finish_reason || '?'}, ${tokens}${hasReasoning}`);
             }
         }
 
@@ -1168,7 +1171,8 @@ async function generateOpenAICompatibleResponse(baseUrl, apiKey, model, messages
             throw new Error(`${preset.name || 'API'} error (via proxy): ${errorMsg}`);
         }
 
-        return data.choices?.[0]?.message?.content || '';
+        // Fall back to reasoning_content for models that use thinking tokens
+        return msg?.content || msg?.reasoning_content || '';
     }
 
     const headers = buildProviderHeaders(preset, apiKey);
@@ -1195,14 +1199,17 @@ async function generateOpenAICompatibleResponse(baseUrl, apiKey, model, messages
     }
 
     const data = await response.json();
+    const msg = data.choices?.[0]?.message;
 
     if (verbose) {
         const usage = data.usage;
         const tokens = usage ? `${usage.prompt_tokens} prompt + ${usage.completion_tokens} completion` : 'no usage data';
-        logActivity(`Generate (direct) HTTP ${response.status}, model=${data.model || model}, finish=${data.choices?.[0]?.finish_reason || '?'}, ${tokens}`);
+        const hasReasoning = msg?.reasoning_content ? ` [reasoning: ${msg.reasoning_content.length} chars]` : '';
+        logActivity(`Generate (direct) HTTP ${response.status}, model=${data.model || model}, finish=${data.choices?.[0]?.finish_reason || '?'}, ${tokens}${hasReasoning}`);
     }
 
-    return data.choices?.[0]?.message?.content || '';
+    // Fall back to reasoning_content for models that use thinking tokens
+    return msg?.content || msg?.reasoning_content || '';
 }
 
 /**

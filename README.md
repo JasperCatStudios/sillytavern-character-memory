@@ -395,6 +395,12 @@ Some providers serve models with "thinking" or "reasoning" enabled by default (e
 
 The verbose Activity Log will show `[reasoning: N chars]` when a model uses reasoning tokens, so you can tell at a glance what's happening.
 
+**Disabling reasoning**: Some APIs let you turn off thinking mode via a request parameter. For GLM-4.7 on NVIDIA, you can try putting this in CharMemory's **System prompt** field in provider settings:
+```
+"thinking": { "type": "disabled" }
+```
+This may allow the model to use its full token budget for memory output instead of reasoning. Results may vary — if it doesn't help, increase the response length instead.
+
 ### Models to avoid
 
 | Model | Issue |

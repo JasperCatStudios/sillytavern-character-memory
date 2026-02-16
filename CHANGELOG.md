@@ -1,5 +1,43 @@
 # Changelog
 
+## 1.2.0
+
+### New Features
+
+- **NVIDIA provider**: Added NVIDIA as a built-in provider. NVIDIA's API doesn't support CORS, so requests are automatically routed through SillyTavern's server proxy — no extra setup needed.
+- **Reasoning/thinking model support**: Models that use reasoning tokens (e.g., GLM-4.7 on NVIDIA) put output in `reasoning_content` instead of `content`. CharMemory now reads this automatically. Verbose logging shows `[reasoning: N chars]` when reasoning tokens are used. Some providers may support disabling reasoning via the system prompt field — see README for details.
+- **API key reveal/hide toggle**: Eye icon button next to the API key field to show/hide the key.
+- **Inline test feedback**: API key test results now appear inline below the key field instead of as a toast notification.
+- **Verbose API response logging**: When verbose mode is enabled, the Activity Log shows HTTP status codes, finish reasons, token usage, and reasoning content length for all API calls.
+- **Character card in extraction prompt**: The character card is now included as a bounded reference section so the LLM knows what baseline traits NOT to re-extract. This significantly reduces card-trait leakage.
+- **Auto-fetch models on API key entry**: Model list is fetched automatically when you enter or change your API key, instead of requiring a manual refresh.
+
+### Improvements
+
+- **Default chunk size reduced**: "Messages per LLM call" default changed from 50 to 20. Testing showed 50 caused timeouts with some providers, and 20 produces good results for most chat styles.
+- **Response length slider max increased**: From 2000 to 4000 tokens, to accommodate reasoning/thinking models that need budget for both reasoning and output.
+- **Default to Dedicated API**: Extraction source now defaults to "Dedicated API" instead of "Main LLM". Dedicated API produces better memories because the extraction prompt isn't polluted by chat context.
+- **Clearer UI labels**: "API Provider" renamed to "Dedicated API", "LLM Provider" renamed to "LLM Used for Extraction".
+- **Extraction prompt refinements**: Reduced card-trait leakage, meta-narration, and play-by-play through iterative prompt testing across multiple models.
+
+### Bug Fixes
+
+- **Detect proxy-forwarded API errors**: SillyTavern's proxy returns HTTP 200 even for upstream errors, wrapping them in `{ error: { message } }`. CharMemory now checks the response body for errors instead of relying solely on HTTP status.
+- **Add CSRF token to proxy requests**: Proxy requests now include the CSRF token required by SillyTavern's server.
+- **Clear stale test status on provider switch**: Test result text no longer persists when switching between providers.
+- **Fix extraction counter display**: The progress counter in the stats bar now updates immediately when the interval slider changes.
+- **Fix stuck "Testing..." button**: The Test button no longer gets stuck in the "Testing..." state on errors.
+- **Guard model fetch when API key is missing**: No longer fires an API request with a blank key when the provider is selected before entering credentials.
+
+### Documentation
+
+- **Quick Start guide**: New 4-step minimal setup guide at the top of the README.
+- **Full Setup Guide**: Detailed walkthrough with screenshots, separated from the Quick Start.
+- **Reasoning model guidance**: New section explaining how thinking models work and how to configure response length.
+- **"Why Local Vectorization Is Fine"**: New section explaining why local embedding models are adequate for CharMemory.
+- **Extraction tuning guidance**: Advice on adjusting chunk size based on chat style, expectations for batch-extracting long chats.
+- **NVIDIA provider notes**: Documentation for the transparent proxy routing.
+
 ## 1.1.0
 
 ### New Features

@@ -12,7 +12,7 @@ These memory files are then vectorized by **Vector Storage** (a standard extensi
 
 ### Feature Overview
 
-- **Automatic**: Extracts memories every N character messages (configurable with cooldown for rapid-fire conversations
+- **Automatic**: Extracts memories every N character messages (configurable with cooldown for rapid-fire conversations)
 - **Chunked**: Loops through all unprocessed messages in chunks to prevent overwheming the LLM's context window
 - **Batch extraction**: Extract memories from all (or selected) chats for a character, not just the active one
 - **Visible**: Memories stored as a plain markdown file in character Data Bank — fully viewable and editable
@@ -104,9 +104,9 @@ As you chat, open the extension to watch the **stats bar** at the top of the Cha
 
 You don't have to wait for the auto-extraction threshold. There are two ways to extract right away:
 
-**Extract Now** (button at the top of the CharMemory panel) processes all unprocessed messages in the entire chat. Click it, and you'll see a toast notification with how many memories were saved.
+1. **Extract Now** (button at the top of the CharMemory panel) processes all unprocessed messages in the entire chat. Click it, and you'll see a toast notification with how many memories were saved.
 
-**Extract Here** (brain icon on any character message) processes all unprocessed messages up to and including that specific message. This is useful when you want to extract from a particular point in the conversation without processing everything after it.
+2. **Extract Here** (brain icon on any character message) processes all unprocessed messages up to and including that specific message. This is useful when you want to extract from a particular point in the conversation without processing everything after it.
 
 ![The brain icon on a character message — "Extract memories up to here"](images/11-extract-here.png)
 
@@ -162,10 +162,10 @@ After extracting some memories and chatting further, use the [Diagnostics](#usin
 
 Each message in your chat has two extra buttons (visible when you hover over the message):
 
-**Extract Here** (brain icon, character messages only)
+1. **Extract Here** (brain icon, character messages only)
 Runs LLM-based extraction on all unprocessed messages up to and including this one. Useful for targeting a specific point in a long conversation. Uses the same provider and settings as auto-extraction.
 
-**Pin as Memory** (bookmark icon, all messages)
+2. **Pin as Memory** (bookmark icon, all messages)
 Manually saves a message as a memory with no LLM involved. Opens an edit dialog pre-filled with the message text so you can rewrite it however you want before saving. Each line becomes a memory bullet. Use this when you want to remember something specific exactly as you phrase it.
 
 ---
@@ -385,6 +385,8 @@ If you already have memory files in the Data Bank from manual notes or another t
 ```
 
 Any text outside `<memory>` blocks is ignored by the Memory Manager and won't appear in diagnostics. It won't cause errors, but it also won't be managed by CharMemory.
+
+The easiest way to manage your existing memory files that are not in this format is going to be to use an LLM in chat mode (outside SillyTavern, e.g. the NanoGPT web interface), parte in the format example above and attach your chat files.
 
 After converting existing files or making manual edits, **purge vectors and revectorize** the file in Vector Storage so the index reflects the updated content. Vector Storage doesn't incrementally update — it re-chunks and re-embeds the entire file from scratch when you revectorize.
 

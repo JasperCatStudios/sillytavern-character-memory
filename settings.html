@@ -48,17 +48,17 @@
                 </div>
                 <div class="inline-drawer-content">
 
-                    <!-- Section 1: LLM Provider -->
+                    <!-- Section 1: LLM Used for Extraction -->
                     <div class="charMemory_statusRow">
-                        <label for="charMemory_source" title="Which LLM provider to use for memory extraction and consolidation">
-                            <small>LLM Provider</small>
+                        <label for="charMemory_source" title="Which LLM to use for memory extraction and consolidation">
+                            <small>LLM Used for Extraction</small>
                         </label>
                         <select id="charMemory_source" class="text_pole">
                             <option value="main_llm">Main LLM</option>
                             <option value="webllm">WebLLM (browser-local)</option>
-                            <option value="provider">API Provider (recommended)</option>
+                            <option value="provider">Dedicated API (recommended)</option>
                         </select>
-                        <small class="charMemory_helperText"><b>API Provider is recommended.</b> Main LLM pollutes the extraction prompt with chat context, system prompts, and other instructions that degrade memory quality. API Provider sends a clean, focused extraction prompt directly to the LLM.</small>
+                        <small class="charMemory_helperText"><b>Dedicated API is recommended.</b> Main LLM pollutes the extraction prompt with chat context, system prompts, and other instructions that degrade memory quality. Dedicated API sends a clean, focused extraction prompt directly to the LLM.</small>
 
                         <div id="charMemory_providerSettings" style="display:none;">
                             <div class="charMemory_statusRow">

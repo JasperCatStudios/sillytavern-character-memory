@@ -45,31 +45,31 @@ To enable: click the **User Settings** icon (the person silhouette at the top) �
 
 CharMemory needs an LLM to read your chat messages and extract memories from them. This is separate from your main chat LLM. Open the **Settings** section inside the CharMemory panel.
 
-You have three options for **LLM Provider**:
+You have three options for **LLM Used for Extraction**:
 
 | Provider | How it works | Best for |
 |----------|-------------|----------|
 | **Main LLM** | Uses whatever LLM you're chatting with | Quick start, but lower quality (see below) |
 | **WebLLM** | Runs a small model locally in your browser | Privacy, no API cost, but limited quality |
-| **API Provider** (recommended) | Sends a clean extraction request directly to an API | Best extraction quality |
+| **Dedicated API** (recommended) | Sends a clean extraction request directly to an API | Best extraction quality |
 
-**Why API Provider is recommended:** When using Main LLM, the extraction prompt gets mixed in with your chat's system prompts, character cards, and other instructions. This pollutes the extraction and degrades quality. API Provider sends a focused, clean prompt directly to the LLM with nothing else attached.
+**Why Dedicated API is recommended:** When using Main LLM, the extraction prompt gets mixed in with your chat's system prompts, character cards, and other instructions. This pollutes the extraction and degrades quality. Dedicated API sends a focused, clean prompt directly to the LLM with nothing else attached.
 
-### Setting up API Provider
+### Setting up Dedicated API
 
-1. Set **LLM Provider** to **API Provider (recommended)**
+1. Set **LLM Used for Extraction** to **Dedicated API (recommended)**
 2. Choose a **Provider** from the dropdown. Options include OpenAI, Anthropic, OpenRouter, Groq, DeepSeek, Mistral, NanoGPT, Ollama, and others.
 3. Enter your **API Key** for that provider
 4. Click **Test** to verify the connection works
 5. Select a **Model** from the dropdown
 
-![CharMemory Settings — API Provider with NanoGPT, model selection, and auto-extraction sliders](images/04-settings-provider.png)
+![CharMemory Settings — Dedicated API with NanoGPT, model selection, and auto-extraction sliders](images/04-settings-provider.png)
 
 If you're not sure which model to use, see the [Recommended Models](#recommended-models) section below.
 
 ### If you just want to get started quickly
 
-Set LLM Provider to **Main LLM** and skip the API configuration. This works out of the box with whatever LLM you're already chatting with. You can always switch to API Provider later for better quality.
+Set LLM Used for Extraction to **Main LLM** and skip the API configuration. This works out of the box with whatever LLM you're already chatting with. You can always switch to Dedicated API later for better quality.
 
 ## Step 3: Chat Normally
 

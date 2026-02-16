@@ -34,7 +34,7 @@ CHANGELOG.md    — Version history
 
 Three extraction sources: `EXTRACTION_SOURCE.MAIN_LLM`, `EXTRACTION_SOURCE.WEBLLM`, `EXTRACTION_SOURCE.PROVIDER`.
 
-The "API Provider" source uses `PROVIDER_PRESETS` — a registry of named presets (OpenAI, Anthropic, OpenRouter, Groq, DeepSeek, Mistral, xAI, NanoGPT, Ollama, Pollinations, Custom). Each preset defines: `baseUrl`, `authStyle` (`'bearer'` | `'x-api-key'` | `'none'`), `modelsEndpoint` (`'standard'` | `'custom'` | `'none'`), `requiresApiKey`, `extraHeaders`, `defaultModel`.
+The "Dedicated API" source uses `PROVIDER_PRESETS` — a registry of named presets (OpenAI, Anthropic, OpenRouter, Groq, DeepSeek, Mistral, xAI, NanoGPT, Ollama, Pollinations, Custom). Each preset defines: `baseUrl`, `authStyle` (`'bearer'` | `'x-api-key'` | `'none'`), `modelsEndpoint` (`'standard'` | `'custom'` | `'none'`), `requiresApiKey`, `extraHeaders`, `defaultModel`.
 
 All providers except Anthropic use the OpenAI-compatible `/chat/completions` endpoint via `generateOpenAICompatibleResponse()`. Anthropic has its own adapter `generateAnthropicResponse()` that converts to the Messages API format.
 

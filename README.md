@@ -117,11 +117,11 @@ Old `## Memory N` format files are auto-migrated on first read.
 
 Settings are organized in the **Settings** drawer:
 
-#### LLM Provider
+#### LLM Used for Extraction
 
 | Setting | Default | Description |
 |---------|---------|-------------|
-| LLM Provider | Main LLM | Choose between Main LLM, WebLLM (browser-local), or NanoGPT (direct API) |
+| LLM Used for Extraction | Main LLM | Choose between Main LLM, WebLLM (browser-local), or Dedicated API |
 
 #### Auto-Extraction
 
@@ -171,7 +171,7 @@ The three main sliders — **Extract after every N messages** (interval), **Mini
 
 ### NanoGPT Settings
 
-When NanoGPT is selected as the LLM provider, additional settings appear:
+When a Dedicated API provider is selected, additional settings appear:
 
 | Setting | Description |
 |---------|-------------|

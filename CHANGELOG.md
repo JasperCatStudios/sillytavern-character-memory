@@ -6,11 +6,10 @@
 
 - **NVIDIA provider**: Added NVIDIA as a built-in provider. NVIDIA's API doesn't support CORS, so requests are automatically routed through SillyTavern's server proxy — no extra setup needed.
 - **Reasoning/thinking model support**: Models that use reasoning tokens (e.g., GLM-4.7 on NVIDIA) put output in `reasoning_content` instead of `content`. CharMemory now reads this automatically. Verbose logging shows `[reasoning: N chars]` when reasoning tokens are used. Some providers may support disabling reasoning via the system prompt field — see README for details.
-- **API key reveal/hide toggle**: Eye icon button next to the API key field to show/hide the key.
-- **Inline test feedback**: API key test results now appear inline below the key field instead of as a toast notification.
+- **API key reveal/hide toggle**: Eye icon button next to the API key field to show/hide the key. Auto-hides after 10 seconds for security.
+- **Connect/Test Model flow**: Explicit Connect button fetches the model list with inline status feedback. Test Model button verifies the selected model responds correctly, showing model name, response time, and whether it followed the test instruction.
 - **Verbose API response logging**: When verbose mode is enabled, the Activity Log shows HTTP status codes, finish reasons, token usage, and reasoning content length for all API calls.
 - **Character card in extraction prompt**: The character card is now included as a bounded reference section so the LLM knows what baseline traits NOT to re-extract. This significantly reduces card-trait leakage.
-- **Auto-fetch models on API key entry**: Model list is fetched automatically when you enter or change your API key, instead of requiring a manual refresh.
 
 ### Improvements
 

@@ -2,6 +2,7 @@
 
 This extension automatically extracts structured character memories from chat and stores them in the character's Data Bank. Memories are vectorized by SillyTavern's Vector Storage so the most relevant ones are retrieved at generation time — your character remembers things from old conversations.
 
+
 ## What CharMemory Does
 
 When you chat with a character in SillyTavern, the conversation disappears from the LLM's context as it scrolls past the token limit. CharMemory solves this by automatically extracting important facts, events, and developments from your chats and storing them as structured memories.
@@ -12,8 +13,8 @@ These memory files are then vectorized by **Vector Storage** (a standard extensi
 
 ### Feature Overview
 
-- **Automatic**: Extracts memories every N character messages (configurable with cooldown for rapid-fire conversations)
-- **Chunked**: Loops through all unprocessed messages in chunks to prevent overwheming the LLM's context window
+- **Automatic**: Extracts memories every N character messages/turns (configurable with cooldown for rapid-fire conversations)
+- **Chunked**: Loops through all unprocessed messages in chunks to prevent overwhelming the LLM's context window
 - **Batch extraction**: Extract memories from all (or selected) chats for a character, not just the active one
 - **Visible**: Memories stored as a plain markdown file in character Data Bank — fully viewable and editable
 - **Per-bullet management**: Browse, edit, or delete individual memory bullets from the Memory Manager
@@ -21,10 +22,38 @@ These memory files are then vectorized by **Vector Storage** (a standard extensi
 - **Scoped**: Memories are per-character by default, with optional per-chat isolation
 - **Non-destructive**: Only appends, never overwrites existing memories
 - **Multiple LLM sources**: Dedicated connection to an LLM provider via API (recommended), WebLLM (browser-local), or the Main LLM provider in use for the chat
+- **Memory/Lorebook diagnostics**: Shows you exactly what the LLM saw during its last generation to help debug memories and lorebook entries not showing up/triggering
 
 ---
 
-## Getting Started
+## Quick Start
+
+You need a working SillyTavern installation and an API key for any supported LLM provider.
+
+**1. Install the extension**
+Open SillyTavern → click the **Extensions** icon (puzzle piece) → **Install extension** → paste this URL → click **Install just for me**:
+```
+https://github.com/bal-spec/sillytavern-character-memory
+```
+
+**2. Set up the extraction LLM**
+Scroll down in Extensions to find **Character Memory** → expand **Settings** → under **Provider**, pick one (e.g., OpenRouter, NanoGPT, Groq — any provider with an OpenAI-compatible API works) → enter your **API Key** → click **Test** to verify → select a **Model** from the dropdown.
+
+Not sure which model? **GLM 4.7** and **DeepSeek V3.1** are good starting points.
+
+**3. Enable Vector Storage**
+Still in Extensions, find **Vector Storage** → set Vectorization Source to **Local (Transformers)** → under **File vectorization settings**, check **Enable for files**. This is what makes your character actually *use* the extracted memories during chat.
+
+**4. Chat**
+Chat normally with any character. After 20 character messages, memories are extracted automatically. Click **View / Edit** in the CharMemory panel to see what was captured.
+
+That's it — you're up and running. Everything below covers the details: what the extension does, how to tune it, recommended settings, and troubleshooting.
+
+---
+
+## Full Setup Guide
+
+This section walks through each step in detail with screenshots. If you already followed the Quick Start above and everything's working, you can skip ahead to [Per-Message Buttons](#per-message-buttons) or [Understanding the Extraction Settings](#understanding-the-extraction-settings).
 
 ### Prerequisites
 
@@ -417,7 +446,7 @@ If you already have memory files in the Data Bank from manual notes or another t
 
 Any text outside `<memory>` blocks is ignored by the Memory Manager and won't appear in diagnostics. It won't cause errors, but it also won't be managed by CharMemory.
 
-The easiest way to manage your existing memory files that are not in this format is going to be to use an LLM in chat mode (outside SillyTavern, e.g. the NanoGPT web interface), parte in the format example above and attach your chat files.
+The easiest way to manage your existing memory files that are not in this format is going to be to use an LLM in chat mode (outside SillyTavern, e.g. the NanoGPT web interface), paste in the format example above and attach your chat files.
 
 After converting existing files or making manual edits, **purge vectors and revectorize** the file in Vector Storage so the index reflects the updated content. Vector Storage doesn't incrementally update — it re-chunks and re-embeds the entire file from scratch when you revectorize.
 

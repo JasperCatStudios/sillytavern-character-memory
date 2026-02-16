@@ -54,9 +54,9 @@
                             <small>LLM Used for Extraction</small>
                         </label>
                         <select id="charMemory_source" class="text_pole">
-                            <option value="main_llm">Main LLM</option>
-                            <option value="webllm">WebLLM (browser-local)</option>
                             <option value="provider">Dedicated API (recommended)</option>
+                            <option value="webllm">WebLLM (browser-local)</option>
+                            <option value="main_llm">Main LLM</option>
                         </select>
                         <small class="charMemory_helperText"><b>Dedicated API is recommended.</b> Main LLM pollutes the extraction prompt with chat context, system prompts, and other instructions that degrade memory quality. Dedicated API sends a clean, focused extraction prompt directly to the LLM.</small>
 

@@ -9,7 +9,7 @@ Automatically extracts structured character memories from chat and stores them i
 ```
 Chat happens (every N character messages)
     → Extension auto-fires on CHARACTER_MESSAGE_RENDERED
-    → Extracts new memories via main LLM, WebLLM, or NanoGPT
+    → Extracts new memories via Dedicated API, WebLLM, or Main LLM
     → Appends <memory> blocks to character-scoped Data Bank file
     → Vector Storage vectorizes the file automatically
     → Relevant memories retrieved at generation time
@@ -23,7 +23,7 @@ Chat happens (every N character messages)
 - **Consolidation**: Merge duplicate and related memories with preview before applying and one-click undo
 - **Scoped**: Memories are per-character by default, with optional per-chat isolation
 - **Non-destructive**: Only appends, never overwrites existing memories
-- **Multiple LLM sources**: Main LLM, WebLLM (browser-local), or NanoGPT (direct API)
+- **Multiple LLM sources**: Dedicated API (recommended), WebLLM (browser-local), or Main LLM
 
 ## Installation
 
@@ -121,7 +121,7 @@ Settings are organized in the **Settings** drawer:
 
 | Setting | Default | Description |
 |---------|---------|-------------|
-| LLM Used for Extraction | Main LLM | Choose between Main LLM, WebLLM (browser-local), or Dedicated API |
+| LLM Used for Extraction | Dedicated API | Choose between Dedicated API, WebLLM (browser-local), or Main LLM |
 
 #### Auto-Extraction
 

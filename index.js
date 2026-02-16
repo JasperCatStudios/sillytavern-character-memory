@@ -291,7 +291,7 @@ const defaultSettings = {
     maxMessagesPerExtraction: 50,
     responseLength: 1000,
     extractionPrompt: defaultExtractionPrompt,
-    source: EXTRACTION_SOURCE.MAIN_LLM,
+    source: EXTRACTION_SOURCE.PROVIDER,
     fileName: DEFAULT_FILE_NAME,
     perChat: false,
     selectedProvider: 'openrouter',

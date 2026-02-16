@@ -263,6 +263,17 @@ const PROVIDER_PRESETS = {
         defaultModel: '',
         helpUrl: 'https://ollama.com',
     },
+    nvidia: {
+        name: 'NVIDIA',
+        baseUrl: 'https://integrate.api.nvidia.com/v1',
+        authStyle: 'bearer',
+        modelsEndpoint: 'standard',
+        requiresApiKey: true,
+        extraHeaders: {},
+        defaultModel: '',
+        helpUrl: 'https://build.nvidia.com/',
+        useProxy: true,
+    },
     pollinations: {
         name: 'Pollinations (free)',
         baseUrl: 'https://text.pollinations.ai/openai',
@@ -1109,6 +1120,61 @@ function resolveBaseUrl(preset, providerSettings) {
  * @returns {Promise<string>} The assistant's response content.
  */
 async function generateOpenAICompatibleResponse(baseUrl, apiKey, model, messages, maxTokens, preset) {
+    const verbose = extension_settings[MODULE_NAME].verboseLogging;
+
+    // Route through ST server proxy if provider requires it (CORS bypass)
+    if (preset.useProxy) {
+        const response = await fetch('/api/backends/chat-completions/generate', {
+            method: 'POST',
+            headers: getRequestHeaders(),
+            body: JSON.stringify({
+                chat_completion_source: 'custom',
+                custom_url: baseUrl,
+                custom_include_headers: `Authorization: Bearer ${apiKey}`,
+                model,
+                messages,
+                max_tokens: maxTokens,
+                temperature: 0.3,
+                stream: false,
+            }),
+        });
+
+        if (!response.ok) {
+            const presetName = preset.name || 'API';
+            let errorMsg = `${presetName} error: ${response.status}`;
+            try {
+                const errorBody = await response.json();
+                errorMsg += ` — ${errorBody.error?.message || JSON.stringify(errorBody)}`;
+            } catch { /* ignore parse error */ }
+            if (verbose) logActivity(`Generate (proxy) HTTP ${response.status} — ST server error`, 'error');
+            throw new Error(errorMsg);
+        }
+
+        const data = await response.json();
+
+        const msg = data.choices?.[0]?.message;
+
+        if (verbose) {
+            if (data.error) {
+                logActivity(`Generate (proxy) HTTP ${response.status} — upstream error: ${JSON.stringify(data.error)}`, 'error');
+            } else {
+                const usage = data.usage;
+                const tokens = usage ? `${usage.prompt_tokens} prompt + ${usage.completion_tokens} completion` : 'no usage data';
+                const hasReasoning = msg?.reasoning_content ? ` [reasoning: ${msg.reasoning_content.length} chars]` : '';
+                logActivity(`Generate (proxy) HTTP ${response.status}, model=${data.model || model}, finish=${data.choices?.[0]?.finish_reason || '?'}, ${tokens}${hasReasoning}`);
+            }
+        }
+
+        // ST proxy returns 200 even for upstream errors — detect error in body
+        if (data.error) {
+            const errorMsg = data.error.message || JSON.stringify(data.error);
+            throw new Error(`${preset.name || 'API'} error (via proxy): ${errorMsg}`);
+        }
+
+        // Fall back to reasoning_content for models that use thinking tokens
+        return msg?.content || msg?.reasoning_content || '';
+    }
+
     const headers = buildProviderHeaders(preset, apiKey);
     const response = await fetch(`${baseUrl}/chat/completions`, {
         method: 'POST',
@@ -1128,11 +1194,22 @@ async function generateOpenAICompatibleResponse(baseUrl, apiKey, model, messages
             const errorBody = await response.json();
             errorMsg += ` — ${errorBody.error?.message || JSON.stringify(errorBody)}`;
         } catch { /* ignore parse error */ }
+        if (verbose) logActivity(`Generate (direct) HTTP ${response.status} — ${errorMsg}`, 'error');
         throw new Error(errorMsg);
     }
 
     const data = await response.json();
-    return data.choices?.[0]?.message?.content || '';
+    const msg = data.choices?.[0]?.message;
+
+    if (verbose) {
+        const usage = data.usage;
+        const tokens = usage ? `${usage.prompt_tokens} prompt + ${usage.completion_tokens} completion` : 'no usage data';
+        const hasReasoning = msg?.reasoning_content ? ` [reasoning: ${msg.reasoning_content.length} chars]` : '';
+        logActivity(`Generate (direct) HTTP ${response.status}, model=${data.model || model}, finish=${data.choices?.[0]?.finish_reason || '?'}, ${tokens}${hasReasoning}`);
+    }
+
+    // Fall back to reasoning_content for models that use thinking tokens
+    return msg?.content || msg?.reasoning_content || '';
 }
 
 /**
@@ -1171,6 +1248,8 @@ async function generateAnthropicResponse(baseUrl, apiKey, model, messages, maxTo
     };
     if (system) body.system = system;
 
+    const verbose = extension_settings[MODULE_NAME].verboseLogging;
+
     const response = await fetch(`${baseUrl}/messages`, {
         method: 'POST',
         headers,
@@ -1183,10 +1262,18 @@ async function generateAnthropicResponse(baseUrl, apiKey, model, messages, maxTo
             const errorBody = await response.json();
             errorMsg += ` — ${errorBody.error?.message || JSON.stringify(errorBody)}`;
         } catch { /* ignore parse error */ }
+        if (verbose) logActivity(`Generate (Anthropic) HTTP ${response.status} — ${errorMsg}`, 'error');
         throw new Error(errorMsg);
     }
 
     const data = await response.json();
+
+    if (verbose) {
+        const usage = data.usage;
+        const tokens = usage ? `${usage.input_tokens} in + ${usage.output_tokens} out` : 'no usage data';
+        logActivity(`Generate (Anthropic) HTTP ${response.status}, model=${data.model || model}, stop=${data.stop_reason || '?'}, ${tokens}`);
+    }
+
     return (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('') || '';
 }
 
@@ -1281,15 +1368,50 @@ async function fetchProviderModels(providerKey) {
         return models.map(m => ({ id: m.id, name: m.name, _raw: m }));
     }
 
+    const verbose = extension_settings[MODULE_NAME].verboseLogging;
     const providerSettings = getProviderSettings(providerKey);
     const baseUrl = resolveBaseUrl(preset, providerSettings);
     if (!baseUrl) return [];
+
+    // Route through ST server proxy if provider requires it (CORS bypass)
+    if (preset.useProxy) {
+        const response = await fetch('/api/backends/chat-completions/status', {
+            method: 'POST',
+            headers: getRequestHeaders(),
+            body: JSON.stringify({
+                chat_completion_source: 'custom',
+                custom_url: baseUrl,
+                custom_include_headers: `Authorization: Bearer ${providerSettings.apiKey}`,
+            }),
+        });
+        if (!response.ok) {
+            if (verbose) logActivity(`Models (proxy) HTTP ${response.status} — ST server error`, 'error');
+            throw new Error(`Failed to fetch models from ${preset.name}: ${response.status}`);
+        }
+        const data = await response.json();
+
+        // ST proxy returns 200 even for upstream errors — detect error in body
+        if (data.error) {
+            const errorMsg = data.error.message || JSON.stringify(data.error);
+            if (verbose) logActivity(`Models (proxy) HTTP ${response.status} — upstream error: ${JSON.stringify(data.error)}`, 'error');
+            throw new Error(`Failed to fetch models from ${preset.name}: ${errorMsg}`);
+        }
+
+        const rawModels = data?.data || [];
+        const models = rawModels
+            .map(m => ({ id: m.id, name: m.id }))
+            .sort((a, b) => a.name.localeCompare(b.name));
+        if (verbose) logActivity(`Models (proxy) HTTP ${response.status}, ${models.length} models loaded from ${preset.name}`);
+        modelCache[providerKey] = models;
+        return models;
+    }
 
     const headers = buildProviderHeaders(preset, providerSettings.apiKey);
     delete headers['Content-Type']; // GET request
 
     const response = await fetch(`${baseUrl}/models`, { headers });
     if (!response.ok) {
+        if (verbose) logActivity(`Models (direct) HTTP ${response.status} from ${baseUrl}/models`, 'error');
         throw new Error(`Failed to fetch models from ${preset.name}: ${response.status}`);
     }
 
@@ -1298,6 +1420,7 @@ async function fetchProviderModels(providerKey) {
     const models = rawModels
         .map(m => ({ id: m.id, name: m.id }))
         .sort((a, b) => a.name.localeCompare(b.name));
+    if (verbose) logActivity(`Models (direct) HTTP ${response.status}, ${models.length} models loaded from ${preset.name}`);
 
     modelCache[providerKey] = models;
     return models;
@@ -1320,25 +1443,28 @@ function clearModelCache(providerKey) {
 async function testProviderConnection() {
     const providerKey = extension_settings[MODULE_NAME].selectedProvider;
     const preset = PROVIDER_PRESETS[providerKey];
+    const $status = $('#charMemory_providerTestStatus');
+
     if (!preset) {
-        toastr.error('Unknown provider selected.', 'CharMemory');
+        $status.text('Unknown provider selected.').css('color', '#e74c3c').show();
         return;
     }
 
     const providerSettings = getProviderSettings(providerKey);
     if (preset.requiresApiKey && !providerSettings.apiKey) {
-        toastr.error('Enter an API key first.', 'CharMemory');
+        $status.text('Enter an API key first.').css('color', '#e74c3c').show();
         return;
     }
 
     const $btn = $('#charMemory_providerTest');
     $btn.prop('disabled', true).val('Testing...');
+    $status.text('Testing connection...').css('color', '').show();
 
     try {
         const baseUrl = resolveBaseUrl(preset, providerSettings);
         const testModel = providerSettings.model || preset.defaultModel;
         if (!testModel) {
-            toastr.warning('Select a model first, then test.', 'CharMemory');
+            $status.text('Select a model first, then test.').css('color', '#e67e22').show();
             return;
         }
         const testMessages = [{ role: 'user', content: 'Say OK' }];
@@ -1350,16 +1476,12 @@ async function testProviderConnection() {
         }
 
         logActivity(`${preset.name} connection test successful`, 'success');
-        toastr.success('Connection successful!', 'CharMemory');
-        $btn.val('\u2714 OK');
-        setTimeout(() => $btn.val('Test'), 3000);
+        $status.text('\u2714 Connected OK').css('color', '#2ecc71').show();
     } catch (err) {
         logActivity(`${preset.name} connection test failed: ${err.message}`, 'error');
-        toastr.error(err.message || 'Connection failed. Check Activity Log for details.', 'CharMemory');
-        $btn.val('\u2718 Fail');
-        setTimeout(() => $btn.val('Test'), 3000);
+        $status.text(`\u2718 ${err.message || 'Connection failed'}`).css('color', '#e74c3c').show();
     } finally {
-        $btn.prop('disabled', false);
+        $btn.prop('disabled', false).val('Test');
     }
 }
 
@@ -2503,6 +2625,7 @@ function setupListeners() {
         extension_settings[MODULE_NAME].interval = val;
         $('#charMemory_intervalCounter').val(val);
         saveSettingsDebounced();
+        updateStatusDisplay();
     });
 
     $('#charMemory_maxMessages').off('input').on('input', function () {
@@ -2536,6 +2659,7 @@ function setupListeners() {
     $('#charMemory_providerSelect').off('change').on('change', function () {
         extension_settings[MODULE_NAME].selectedProvider = String($(this).val());
         saveSettingsDebounced();
+        $('#charMemory_providerTestStatus').hide().text('');
         updateProviderUI();
     });
 
@@ -2584,6 +2708,18 @@ function setupListeners() {
         const providerSettings = getProviderSettings(extension_settings[MODULE_NAME].selectedProvider);
         providerSettings.systemPrompt = String($(this).val());
         saveSettingsDebounced();
+    });
+
+    $('#charMemory_providerApiKeyReveal').off('click').on('click', function () {
+        const $input = $('#charMemory_providerApiKey');
+        const $icon = $(this).find('i');
+        if ($input.attr('type') === 'password') {
+            $input.attr('type', 'text');
+            $icon.removeClass('fa-eye').addClass('fa-eye-slash');
+        } else {
+            $input.attr('type', 'password');
+            $icon.removeClass('fa-eye-slash').addClass('fa-eye');
+        }
     });
 
     $('#charMemory_providerTest').off('click').on('click', () => testProviderConnection());

@@ -70,9 +70,13 @@
                                 <label><small>API Key <a id="charMemory_providerHelpLink" href="#" target="_blank" style="font-size:0.85em;">(get key)</a></small></label>
                                 <div style="display:flex;gap:5px;align-items:center;">
                                     <input type="password" id="charMemory_providerApiKey" class="text_pole" placeholder="Enter API key" style="flex:1;" />
+                                    <button type="button" id="charMemory_providerApiKeyReveal" class="menu_button" title="Show/hide API key" style="padding:3px 8px;">
+                                        <i class="fa-solid fa-eye fa-sm"></i>
+                                    </button>
                                     <input type="button" id="charMemory_providerTest" class="menu_button" value="Test" title="Send a minimal request to verify your API key works" />
                                 </div>
                             </div>
+                            <small id="charMemory_providerTestStatus" class="charMemory_helperText" style="display:none;"></small>
                             <div class="charMemory_statusRow" id="charMemory_providerBaseUrlRow" style="display:none;">
                                 <label><small>Base URL</small></label>
                                 <input type="text" id="charMemory_providerBaseUrl" class="text_pole" placeholder="https://your-server.com/v1" />
@@ -155,9 +159,9 @@
                         <label title="Maximum tokens the LLM can use for its response. Increase if extractions seem truncated.">
                             <small>Max response length</small>
                         </label>
-                        <input class="neo-range-slider" type="range" id="charMemory_responseLength" min="100" max="2000" step="50" value="1000" />
+                        <input class="neo-range-slider" type="range" id="charMemory_responseLength" min="100" max="4000" step="50" value="1000" />
                         <div class="wide100p">
-                            <input class="neo-range-input" type="number" min="100" max="2000" step="50"
+                            <input class="neo-range-input" type="number" min="100" max="4000" step="50"
                                    data-for="charMemory_responseLength" id="charMemory_responseLengthCounter" />
                         </div>
                     </div>

@@ -1120,6 +1120,8 @@ function resolveBaseUrl(preset, providerSettings) {
  * @returns {Promise<string>} The assistant's response content.
  */
 async function generateOpenAICompatibleResponse(baseUrl, apiKey, model, messages, maxTokens, preset) {
+    const verbose = extension_settings[MODULE_NAME].verboseLogging;
+
     // Route through ST server proxy if provider requires it (CORS bypass)
     if (preset.useProxy) {
         const response = await fetch('/api/backends/chat-completions/generate', {
@@ -1144,10 +1146,28 @@ async function generateOpenAICompatibleResponse(baseUrl, apiKey, model, messages
                 const errorBody = await response.json();
                 errorMsg += ` — ${errorBody.error?.message || JSON.stringify(errorBody)}`;
             } catch { /* ignore parse error */ }
+            if (verbose) logActivity(`Generate (proxy) HTTP ${response.status} — ST server error`, 'error');
             throw new Error(errorMsg);
         }
 
         const data = await response.json();
+
+        if (verbose) {
+            if (data.error) {
+                logActivity(`Generate (proxy) HTTP ${response.status} — upstream error: ${JSON.stringify(data.error)}`, 'error');
+            } else {
+                const usage = data.usage;
+                const tokens = usage ? `${usage.prompt_tokens} prompt + ${usage.completion_tokens} completion` : 'no usage data';
+                logActivity(`Generate (proxy) HTTP ${response.status}, model=${data.model || model}, finish=${data.choices?.[0]?.finish_reason || '?'}, ${tokens}`);
+            }
+        }
+
+        // ST proxy returns 200 even for upstream errors — detect error in body
+        if (data.error) {
+            const errorMsg = data.error.message || JSON.stringify(data.error);
+            throw new Error(`${preset.name || 'API'} error (via proxy): ${errorMsg}`);
+        }
+
         return data.choices?.[0]?.message?.content || '';
     }
 
@@ -1170,10 +1190,18 @@ async function generateOpenAICompatibleResponse(baseUrl, apiKey, model, messages
             const errorBody = await response.json();
             errorMsg += ` — ${errorBody.error?.message || JSON.stringify(errorBody)}`;
         } catch { /* ignore parse error */ }
+        if (verbose) logActivity(`Generate (direct) HTTP ${response.status} — ${errorMsg}`, 'error');
         throw new Error(errorMsg);
     }
 
     const data = await response.json();
+
+    if (verbose) {
+        const usage = data.usage;
+        const tokens = usage ? `${usage.prompt_tokens} prompt + ${usage.completion_tokens} completion` : 'no usage data';
+        logActivity(`Generate (direct) HTTP ${response.status}, model=${data.model || model}, finish=${data.choices?.[0]?.finish_reason || '?'}, ${tokens}`);
+    }
+
     return data.choices?.[0]?.message?.content || '';
 }
 
@@ -1213,6 +1241,8 @@ async function generateAnthropicResponse(baseUrl, apiKey, model, messages, maxTo
     };
     if (system) body.system = system;
 
+    const verbose = extension_settings[MODULE_NAME].verboseLogging;
+
     const response = await fetch(`${baseUrl}/messages`, {
         method: 'POST',
         headers,
@@ -1225,10 +1255,18 @@ async function generateAnthropicResponse(baseUrl, apiKey, model, messages, maxTo
             const errorBody = await response.json();
             errorMsg += ` — ${errorBody.error?.message || JSON.stringify(errorBody)}`;
         } catch { /* ignore parse error */ }
+        if (verbose) logActivity(`Generate (Anthropic) HTTP ${response.status} — ${errorMsg}`, 'error');
         throw new Error(errorMsg);
     }
 
     const data = await response.json();
+
+    if (verbose) {
+        const usage = data.usage;
+        const tokens = usage ? `${usage.input_tokens} in + ${usage.output_tokens} out` : 'no usage data';
+        logActivity(`Generate (Anthropic) HTTP ${response.status}, model=${data.model || model}, stop=${data.stop_reason || '?'}, ${tokens}`);
+    }
+
     return (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('') || '';
 }
 
@@ -1323,6 +1361,7 @@ async function fetchProviderModels(providerKey) {
         return models.map(m => ({ id: m.id, name: m.name, _raw: m }));
     }
 
+    const verbose = extension_settings[MODULE_NAME].verboseLogging;
     const providerSettings = getProviderSettings(providerKey);
     const baseUrl = resolveBaseUrl(preset, providerSettings);
     if (!baseUrl) return [];
@@ -1339,13 +1378,23 @@ async function fetchProviderModels(providerKey) {
             }),
         });
         if (!response.ok) {
+            if (verbose) logActivity(`Models (proxy) HTTP ${response.status} — ST server error`, 'error');
             throw new Error(`Failed to fetch models from ${preset.name}: ${response.status}`);
         }
         const data = await response.json();
+
+        // ST proxy returns 200 even for upstream errors — detect error in body
+        if (data.error) {
+            const errorMsg = data.error.message || JSON.stringify(data.error);
+            if (verbose) logActivity(`Models (proxy) HTTP ${response.status} — upstream error: ${JSON.stringify(data.error)}`, 'error');
+            throw new Error(`Failed to fetch models from ${preset.name}: ${errorMsg}`);
+        }
+
         const rawModels = data?.data || [];
         const models = rawModels
             .map(m => ({ id: m.id, name: m.id }))
             .sort((a, b) => a.name.localeCompare(b.name));
+        if (verbose) logActivity(`Models (proxy) HTTP ${response.status}, ${models.length} models loaded from ${preset.name}`);
         modelCache[providerKey] = models;
         return models;
     }
@@ -1355,6 +1404,7 @@ async function fetchProviderModels(providerKey) {
 
     const response = await fetch(`${baseUrl}/models`, { headers });
     if (!response.ok) {
+        if (verbose) logActivity(`Models (direct) HTTP ${response.status} from ${baseUrl}/models`, 'error');
         throw new Error(`Failed to fetch models from ${preset.name}: ${response.status}`);
     }
 
@@ -1363,6 +1413,7 @@ async function fetchProviderModels(providerKey) {
     const models = rawModels
         .map(m => ({ id: m.id, name: m.id }))
         .sort((a, b) => a.name.localeCompare(b.name));
+    if (verbose) logActivity(`Models (direct) HTTP ${response.status}, ${models.length} models loaded from ${preset.name}`);
 
     modelCache[providerKey] = models;
     return models;

@@ -11,8 +11,9 @@ index.js        — All extension logic: extraction, consolidation, provider API
 settings.html   — Extension panel UI (settings, memory manager, diagnostics, batch extract)
 style.css       — All styling
 manifest.json   — ST extension manifest (version, loading order, author)
-README.md       — User-facing documentation
+README.md       — User-facing documentation (getting started guide + technical reference, combined)
 CHANGELOG.md    — Version history
+images/         — Screenshots for documentation
 ```
 
 `index.js` is a single-file architecture. All logic lives there — there are no separate modules.
@@ -22,7 +23,7 @@ CHANGELOG.md    — Version history
 ### Extraction Pipeline
 
 1. Extension listens for `CHARACTER_MESSAGE_RENDERED` events
-2. Counts messages against a configurable interval (default 10)
+2. Counts messages against a configurable interval (default 20)
 3. Collects unprocessed messages in chunks ("Messages per LLM call", default 50)
 4. Strips non-diegetic content (code blocks, tables, HTML tags) from messages
 5. Sends existing memories + recent messages + character card to the LLM with the extraction prompt

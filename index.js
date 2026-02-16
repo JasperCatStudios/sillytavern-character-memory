@@ -263,6 +263,17 @@ const PROVIDER_PRESETS = {
         defaultModel: '',
         helpUrl: 'https://ollama.com',
     },
+    nvidia: {
+        name: 'NVIDIA',
+        baseUrl: 'https://integrate.api.nvidia.com/v1',
+        authStyle: 'bearer',
+        modelsEndpoint: 'standard',
+        requiresApiKey: true,
+        extraHeaders: {},
+        defaultModel: '',
+        helpUrl: 'https://build.nvidia.com/',
+        useProxy: true,
+    },
     pollinations: {
         name: 'Pollinations (free)',
         baseUrl: 'https://text.pollinations.ai/openai',

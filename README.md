@@ -1,26 +1,26 @@
 # CharMemory — SillyTavern Extension
 
-Automatically extracts structured character memories from chat and stores them in the character's Data Bank. Memories are vectorized by SillyTavern's Vector Storage so the most relevant ones are retrieved at generation time — your character remembers things from old conversations.
+This extension automatically extracts structured character memories from chat and stores them in the character's Data Bank. Memories are vectorized by SillyTavern's Vector Storage so the most relevant ones are retrieved at generation time — your character remembers things from old conversations.
 
 ## What CharMemory Does
 
 When you chat with a character in SillyTavern, the conversation disappears from the LLM's context as it scrolls past the token limit. CharMemory solves this by automatically extracting important facts, events, and developments from your chats and storing them as structured memories.
 
-Memories are stored as plain markdown files in the character's **Data Bank** — SillyTavern's built-in file attachment system. You can view, edit, or delete the memory file at any time, either through CharMemory's Memory Manager or by editing the Data Bank file directly. There's no proprietary format or lock-in.
+Memories are stored as plain markdown files in the character's **Data Bank** — SillyTavern's built-in file attachment system. You can view, edit, or delete the memory file at any time, either through CharMemory's Memory Manager or by editing the Data Bank file directly.
 
 These memory files are then vectorized by **Vector Storage** (a standard extension that ships with SillyTavern) so that the most relevant memories are automatically retrieved and injected into the LLM's context at generation time.
 
 ### Feature Overview
 
-- **Automatic**: Extracts memories every N character messages (configurable, default 20) with cooldown to prevent rapid-fire
-- **Chunked**: Loops through all unprocessed messages in chunks — no messages are silently skipped
+- **Automatic**: Extracts memories every N character messages (configurable with cooldown for rapid-fire conversations
+- **Chunked**: Loops through all unprocessed messages in chunks to prevent overwheming the LLM's context window
 - **Batch extraction**: Extract memories from all (or selected) chats for a character, not just the active one
 - **Visible**: Memories stored as a plain markdown file in character Data Bank — fully viewable and editable
 - **Per-bullet management**: Browse, edit, or delete individual memory bullets from the Memory Manager
 - **Consolidation**: Merge duplicate and related memories with preview before applying and one-click undo
 - **Scoped**: Memories are per-character by default, with optional per-chat isolation
 - **Non-destructive**: Only appends, never overwrites existing memories
-- **Multiple LLM sources**: Dedicated API (recommended), WebLLM (browser-local), or Main LLM
+- **Multiple LLM sources**: Dedicated connection to an LLM provider via API (recommended), WebLLM (browser-local), or the Main LLM provider in use for the chat
 
 ---
 
@@ -29,8 +29,7 @@ These memory files are then vectorized by **Vector Storage** (a standard extensi
 ### Prerequisites
 
 - A working SillyTavern installation
-- An LLM API connection for your main chat (any provider)
-- An API key for memory extraction (see [Step 2](#step-2-choose-an-extraction-provider) below)
+- If you are using a hosted LLM provider you will need an API key. If you're using the same provider as your chat (not recommended) then this is already configured. If you're using WebLLM it is not needed
 
 ### Step 1: Install the Extension
 
@@ -66,7 +65,7 @@ You have three options for **LLM Used for Extraction**:
 
 | Option | How it works | Best for |
 |--------|-------------|----------|
-| **Dedicated API** (recommended) | Sends a clean extraction request directly to an API | Best extraction quality — the extraction prompt isn't polluted by chat context |
+| **Dedicated API** (recommended) | Sends a clean extraction request directly to an API | Best extraction quality — the extraction prompt isn't polluted by chat prompt |
 | **WebLLM** | Runs a small model locally in your browser | Privacy and no API cost, but limited quality |
 | **Main LLM** | Uses whatever LLM you're chatting with | No extra setup, but extraction quality suffers because the prompt gets mixed with chat system prompts and instructions |
 

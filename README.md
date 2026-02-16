@@ -74,7 +74,7 @@ You have three options for **LLM Used for Extraction**:
 Dedicated API is the default and recommended option. It sends *only* the extraction prompt to the LLM — no chat system prompts, jailbreaks, persona instructions, or other context gets mixed in. (The extraction prompt itself includes the character card as a bounded reference section so the LLM knows what not to re-extract — but that's intentional and controlled, unlike Main LLM where everything piles up.) This produces noticeably better memories.
 
 1. Open **Settings** in the CharMemory panel — **Dedicated API** is already selected
-2. Choose a **Provider** from the dropdown. Options include OpenAI, Anthropic, OpenRouter, Groq, DeepSeek, Mistral, NanoGPT, Ollama, and others.
+2. Choose a **Provider** from the dropdown. Options include OpenAI, Anthropic, OpenRouter, Groq, DeepSeek, Mistral, NanoGPT, NVIDIA, Ollama, and others.
 3. Enter your **API Key** for that provider
 4. Click **Test** to verify the connection works
 5. Select a **Model** from the dropdown
@@ -82,6 +82,8 @@ Dedicated API is the default and recommended option. It sends *only* the extract
 ![CharMemory Settings — Dedicated API with NanoGPT, model selection, and auto-extraction sliders](images/04-settings-provider.png)
 
 If your provider isn't listed, select **Custom** from the Provider dropdown. You can enter any OpenAI-compatible API base URL and it will work as long as the endpoint supports the `/chat/completions` format. Most LLM providers use this standard.
+
+**Note on NVIDIA**: NVIDIA's API doesn't support CORS (browser-to-API requests), so CharMemory automatically routes NVIDIA requests through SillyTavern's server. This happens transparently — no extra setup is needed, just select NVIDIA, enter your API key, and go. Your API key is passed securely via headers and never touches SillyTavern's own configuration.
 
 If you're not sure which model to use, see the [Recommended Models](#recommended-models) section below.
 
@@ -135,7 +137,7 @@ Without Vector Storage enabled for Data Bank files, memories are stored but neve
 #### Enable Vector Storage
 
 1. In the **Extensions** panel, find **Vector Storage** and expand it
-2. Choose a **Vectorization Source**. The simplest option is **Local (Transformers)** — runs in your browser, no API key needed.
+2. Choose a **Vectorization Source**. The simplest option is **Local (Transformers)** — runs in your browser, no API key needed. Local vectorization is perfectly adequate for CharMemory (see note below).
 3. Under **File vectorization settings**, check **Enable for files** — this is the critical setting. CharMemory stores memories as Data Bank files, so this must be on.
 4. Configure the **Data Bank files** settings as shown below
 
@@ -151,6 +153,16 @@ The Vector Storage panel has two rows of file settings: **Message attachments** 
 | **Chunk size** | 3000 chars | A `<memory>` block with 8 bullets is roughly 500-1500 chars. 3000 keeps 1-2 full blocks per chunk without splitting them mid-sentence. Too small and blocks get cut in half. Too large and you lose retrieval granularity. |
 | **Chunk overlap** | 15% | ~450 chars of overlap at 3000 chunk size. Catches memory blocks that straddle a chunk boundary. Without overlap, a block landing exactly on the split gets half in one chunk and half in another, making neither retrievable cleanly. |
 | **Retrieve chunks** | 5 | How many memory chunks are retrieved per generation. At ~2 blocks per chunk, that's roughly 10 memory blocks — enough context without flooding the prompt. Going too high (20+) effectively dumps the whole file, defeating the purpose of semantic search. |
+
+#### Why Local Vectorization Is Fine
+
+You might wonder whether a local embedding model is "good enough" compared to hosted options like OpenAI's embeddings. For CharMemory, it absolutely is.
+
+Embedding is a much simpler task than generation — you're not asking the model to reason or follow instructions, just to measure how semantically similar two pieces of text are. Even small models do this well. For a typical CharMemory use case (dozens to low hundreds of memory bullets per character), the semantic gaps between relevant and irrelevant memories are wide enough that any reasonable embedding model catches them.
+
+Hosted embedding models (OpenAI `text-embedding-3-small`, Cohere `embed-v3`, etc.) produce marginally better embeddings for subtle semantic distinctions, multilingual content, or very large corpora — but for matching "Flux gave Alex a slow blink" against a conversation about the cat's trust level, a local model works perfectly. The retrieval quality bottleneck is almost always the memory *content* quality, not the embedding model.
+
+Local also has practical advantages: no API key, no cost, no rate limits, no privacy concerns (your memories never leave your machine), and no network latency per embedding call.
 
 #### Verify It's Working
 
@@ -184,6 +196,17 @@ If you have existing chats with a character, you don't need to manually extract 
 6. Use **Stop** to cancel mid-extraction — progress is saved per-chunk, so you won't lose work
 
 Each chat's extraction state is tracked separately. Re-running batch extraction only processes new messages since the last run — it won't re-extract messages that have already been processed.
+
+#### Expectations for Long Existing Chats
+
+Batch extraction works best for catching up on recent unprocessed chats. For very long existing chats (hundreds of turns), results may be sparser than you'd expect. This is by design — the LLM only sees one chunk at a time and can't assess significance across the full conversation arc the way it can when extracting incrementally as you chat.
+
+CharMemory works best when it extracts **as you go** — each extraction builds on the previous memories, and the LLM has both the existing memories and the current chunk to work with. When starting fresh on a very long chat, the early chunks have no existing memories for context, so the LLM may miss details that only become significant later.
+
+If batch extraction of a long chat produces too few memories, try:
+- **Increasing "Messages per LLM call"** — giving the LLM a bigger window (40–50 messages) helps it identify more significant events per chunk
+- **Running consolidation after extraction** — this can merge and refine the sparse results
+- **Starting a new chat with the character** — incremental extraction as you chat naturally produces the best results over time
 
 ### Resetting Extraction State
 
@@ -263,30 +286,32 @@ These two settings **only affect automatic extraction**. Manual "Extract Now", p
 
 ### Extraction Quality
 
-**Messages per LLM call** (default: 50, range: 10–200)
-Controls how many messages are sent to the LLM in a single extraction call. If there are more unprocessed messages than this, extraction loops through them in chunks. Larger chunks give the LLM more context per call and produce better memories. The default of 50 is a good balance.
+**Messages per LLM call** (default: 20, range: 10–200)
+Controls how many messages are sent to the LLM in a single extraction call. If there are more unprocessed messages than this, extraction loops through them in chunks. Larger chunks give the LLM more context per call and can produce better memories, but too many messages can cause timeouts with some providers.
 
 In the common auto-extraction case, only N messages (the interval threshold) will have accumulated, so this slider is irrelevant — the chunk size only kicks in when messages pile up beyond the interval, during manual extraction of long chats, or during batch extraction.
 
-We arrived at the default of 50 through testing with several models. Setting this too low (e.g., 10-15) gave the LLM too little context — it would extract trivial details because there wasn't enough conversation to judge what was significant. Setting it too high (150+) didn't improve quality and increased token costs. 50 messages gives the LLM a solid window of conversation to work with while keeping costs reasonable.
+The right value depends on your chat style. If your character writes long, detailed responses, 20 messages might already be a lot of text. If both sides write short messages, you may want to increase this to 40–50 so the LLM has enough context to judge what's significant. The test is to look at the memories it creates — if they're too granular (trivial details), increase this. If extractions are timing out, decrease it.
 
-The auto-extraction interval (default: 20) was similarly tested. At 10, extractions were too frequent with too little context per call. At 20, the LLM has enough conversation to produce meaningful, selective memories without waiting too long between extractions.
+You can check your memories either using the **View/Edit** button in the extension panel, or by going to the character's Data Bank (magic wand icon → Open Data Bank → Character Attachments) and clicking the pencil icon on the memory file.
 
-**Max response length** (default: 1000 tokens, range: 100–2000)
-Token limit for the LLM's response per chunk. Increase this if extractions seem truncated. Most models produce well-formed output within 1000 tokens.
+Setting this too low (e.g., 10) gives the LLM too little context — it extracts trivial details because there isn't enough conversation to judge what's significant. Setting it too high (150+) doesn't improve quality, increases token costs, and may cause timeouts with some providers.
+
+**Max response length** (default: 1000 tokens, range: 100–4000)
+Token limit for the LLM's response per chunk. Most models produce well-formed output within 1000 tokens. **Reasoning/thinking models** (like GLM-4.7 on NVIDIA) need significantly more — their internal reasoning consumes tokens before producing the actual output. If you're using a thinking model and getting empty extractions, increase this to 2000–3000.
 
 ### How the Settings Interact
 
 The three main sliders — **Extract after every N messages** (interval), **Minimum wait between extractions** (cooldown), and **Messages per LLM call** (chunk size) — work together:
 
-**Interval and chunk size.** The extension tracks a `lastExtractedIndex` watermark. Each message is only ever sent to the LLM once — there is no overlap between extractions. When auto-extraction fires after N messages, only those N unprocessed messages are sent, even if the chunk size is larger. This means that with the defaults (interval=20, chunk size=50), each auto-extraction sends exactly 20 messages to the LLM. The chunk size only becomes relevant when more messages accumulate than the interval — for example, during manual "Extract Now" after a long chat, batch extraction, or when the cooldown delayed auto-extraction and messages piled up.
+**Interval and chunk size.** The extension tracks a `lastExtractedIndex` watermark. Each message is only ever sent to the LLM once — there is no overlap between extractions. When auto-extraction fires after N messages, only those N unprocessed messages are sent, even if the chunk size is larger. This means that with the defaults (interval=20, chunk size=20), each auto-extraction sends exactly 20 messages to the LLM. The chunk size only becomes relevant when more messages accumulate than the interval — for example, during manual "Extract Now" after a long chat, batch extraction, or when the cooldown delayed auto-extraction and messages piled up.
 
 **Why the interval matters for quality.** A higher interval gives the LLM more messages per extraction, which means more context to judge what's significant. With only 10 messages, the LLM has little to work with and may extract minor details. With 20–50 messages, it can better identify meaningful developments and skip filler.
 
 **How cooldown works.** When the message counter hits the interval threshold, the extension checks whether enough wall-clock time has passed since the last extraction. If not, extraction is **skipped** (not queued). The counter stays above the threshold, so it checks again on each subsequent message until the cooldown expires. During this time, messages keep accumulating. When extraction finally fires, it processes everything that piled up — potentially sending more than N messages and using the chunk size to split them into multiple LLM calls.
 
 **Practical examples:**
-- *Fast chat, defaults (interval=20, cooldown=10min):* 20 messages arrive in 3 minutes. Extraction wants to fire but cooldown blocks it. By the time 10 minutes pass, 60 messages have accumulated. Extraction fires and processes all 60 in two chunks of 50 and 10.
+- *Fast chat, defaults (interval=20, cooldown=10min):* 20 messages arrive in 3 minutes. Extraction wants to fire but cooldown blocks it. By the time 10 minutes pass, 60 messages have accumulated. Extraction fires and processes all 60 in three chunks of 20.
 - *Leisurely chat, defaults:* 20 messages arrive over 45 minutes. Cooldown is long expired. Extraction fires immediately and processes 20 messages in one call. The chunk size is irrelevant.
 - *High interval (interval=50, cooldown=0):* Extraction fires every 50 messages with no time gate. Each extraction has rich context and produces higher-quality, more selective memories.
 
@@ -328,18 +353,24 @@ Memory extraction is a structured task — the LLM needs to follow instructions 
 
 | Model | Notes |
 |-------|-------|
-| **GLM 4.7** | Best quality and fastest. Concise, significant memories. Recommended first choice. |
+| **GLM 4.7** | Best quality and fastest. Concise, significant memories. Recommended first choice. On NVIDIA, this model uses reasoning tokens — set Max response length to 2000–3000 (see below). On NanoGPT, it works at default settings. |
 | **DeepSeek V3.1 / V3.2** | Good instruction following. Solid second choice. |
 | **Mistral Large 3** | Good quality, sometimes verbose. |
 | **GPT-4.1 nano / mini** | Reliable instruction following at low cost. |
 | **Hermes 4 (405B)** | Good with roleplay-adjacent content, won't refuse. |
+| **Llama 3.1 8B Instruct** | Fast and cheap. Works well on NVIDIA. Good for testing. |
+
+### Reasoning/Thinking models
+
+Some providers serve models with "thinking" or "reasoning" enabled by default (e.g., GLM-4.7 on NVIDIA). These models spend part of their token budget on internal reasoning before producing the actual output. CharMemory handles this transparently — it reads the reasoning output when the content field is empty. However, you need to increase **Max response length** to 2000–3000 so the model has enough budget for both reasoning AND the actual memory output. If you see "0 memories" with a thinking model, this is almost certainly the fix.
+
+The verbose Activity Log will show `[reasoning: N chars]` when a model uses reasoning tokens, so you can tell at a glance what's happening.
 
 ### Models to avoid
 
 | Model | Issue |
 |-------|-------|
 | **Qwen3-235B** | Tends toward compressed play-by-play even with the improved prompt. |
-| **Reasoning/Thinking variants** | Slower and more expensive with no benefit for extraction. |
 | **Very small models** | May reverse who did what or blur the boundary between existing and new memories. |
 | **Heavily censored models** | May refuse to extract from mature content, returning nothing even when there are real events to capture. |
 
@@ -394,7 +425,7 @@ After converting existing files or making manual edits, **purge vectors and reve
 
 ## Troubleshooting
 
-**"0 memories" after extraction**: Check the Activity Log (Tools & Diagnostics → Activity Log). It shows exactly what happened — whether the LLM returned NO_NEW_MEMORIES, produced unparseable output, or encountered an error. Enable **Verbose** mode to see the full prompt and response.
+**"0 memories" after extraction**: Check the Activity Log (Tools & Diagnostics → Activity Log). It shows exactly what happened — whether the LLM returned NO_NEW_MEMORIES, produced unparseable output, or encountered an error. Enable **Verbose** mode to see the full prompt and response. If verbose mode shows `finish=length` with completion tokens used but 0 chars content, you're using a reasoning/thinking model that needs a higher **Max response length** — increase it to 2000–3000.
 
 **Memories extracted but character doesn't use them**: Vector Storage isn't set up, or "Enable for files" isn't checked. Open Diagnostics and verify the Vectorization line shows "Yes" and that Injected Memories shows entries after generating a message.
 
@@ -407,6 +438,8 @@ After converting existing files or making manual edits, **purge vectors and reve
 **Memories contain facts from existing memories, not from the chat**: The model is too weak to respect the boundary markers. Switch to a larger model (DeepSeek V3.1+, GLM 4.7).
 
 **Memories reverse who did what**: Same issue — model too small for accurate comprehension. Use a larger model.
+
+**Memories are too sparse from a long existing chat**: This is expected when batch-extracting hundreds of turns at once. The LLM only sees one chunk at a time and can't judge significance across the full conversation. CharMemory works best when extracting incrementally as you chat. For existing chats, try increasing "Messages per LLM call" to 40–50, and review the extraction prompt setting — the "Messages per LLM call" slider is the one that controls how much the LLM sees, not the extraction interval (which only controls how often auto-extraction fires).
 
 **Memories are too detailed / play-by-play**: The default prompt handles this with an 8-bullet cap and negative examples. If you still see play-by-play, try increasing "Messages per LLM call" to give the LLM more context per call.
 

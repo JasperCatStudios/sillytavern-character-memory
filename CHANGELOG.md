@@ -4,7 +4,7 @@
 
 ### Bug Fixes
 
-- **Remove auto-consolidation**: Auto-consolidation silently ran after bulk "Extract Now" and compressed hundreds of memories into 8 bullets — with no confirmation, no preview, and no undo. This has been removed entirely. Consolidation is now manual-only via the Consolidate button, which shows a before/after preview and supports undo.
+- **Remove auto-consolidation**: Auto-consolidation was left in and would silently run after bulk "Extract Now" without any user prompting or control. This could result in data loss. This feature has been removed entirely. Consolidation is now manual-only via the Consolidate button, which shows a before/after preview and supports undo.
 
 ### Documentation
 

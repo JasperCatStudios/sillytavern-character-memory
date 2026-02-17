@@ -26,6 +26,16 @@ These memory files are then vectorized by **Vector Storage** (a standard extensi
 
 ---
 
+## Before You Start — Back Up Your Data
+
+CharMemory writes to your character's Data Bank files. If you already have memory files, character notes, or other Data Bank attachments you care about, **back them up first**.
+
+To back up: open SillyTavern → click a character → open their **Data Bank** (paperclip icon) → download any files under Character Attachments.
+
+Operations like **Clear All Memories** and **Consolidation** modify or delete memory files and cannot always be undone. A backup takes seconds and protects hours of accumulated memories.
+
+---
+
 ## Quick Start
 
 You need a working SillyTavern installation and an API key for any supported LLM provider.
@@ -248,11 +258,17 @@ Two reset options are available in Settings:
 
 ### Consolidation
 
-When the memory file grows large with many extraction blocks, related or duplicate memories can accumulate across different sessions. **Consolidate** attempts to merge these by sending the full memory file to the LLM with instructions to deduplicate and combine related entries.
+When the memory file grows large with many extraction blocks, related or duplicate memories can accumulate across different sessions. The **Consolidate** button sends the full memory file to the LLM with instructions to deduplicate and combine related entries.
 
-A before/after preview is shown before any changes are applied, and **Undo Consolidation** restores the previous version if the result isn't satisfactory.
+Consolidation is always manual — it never runs automatically. Before any changes are applied:
 
-Note: Consolidation is still being refined. Results vary depending on the model used and the size of the memory file. We recommend reviewing the preview carefully before applying.
+1. A **before/after preview** shows you exactly what will change
+2. You must **confirm** before anything is written
+3. **Undo Consolidation** restores the previous version if the result isn't satisfactory
+
+**Back up your memory file before consolidating**, especially if you have a large number of memories. The undo is session-only — if you close SillyTavern, the backup is lost. To back up: open the character's Data Bank (paperclip icon) and download the memory file.
+
+Results vary depending on the model used and the size of the memory file. Review the preview carefully before applying.
 
 ### Per-Chat Memories
 

@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.2.1
+
+### Bug Fixes
+
+- **Remove auto-consolidation**: Auto-consolidation silently ran after bulk "Extract Now" and compressed hundreds of memories into 8 bullets — with no confirmation, no preview, and no undo. This has been removed entirely. Consolidation is now manual-only via the Consolidate button, which shows a before/after preview and supports undo.
+
+### Documentation
+
+- **Backup warning**: Added a "Before You Start" section to the README advising users to back up their Data Bank files before using the extension.
+- **Consolidation docs updated**: Clarified that consolidation is manual-only, added backup advice, noted that the undo is session-only.
+
 ## 1.2.0
 
 ### New Features

@@ -56,8 +56,6 @@ let lastExtractionResult = null;
 let consolidationBackup = null;
 let lastExtractionTime = 0; // session-only, resets on page load
 
-const CONSOLIDATION_THRESHOLD = 10;
-
 // ============ Activity Log ============
 
 const MAX_LOG_ENTRIES = 500;
@@ -1779,76 +1777,6 @@ async function extractMemories({
             }
         }
 
-        // Auto-consolidation pass: if multi-chunk extraction produced too many bullets, consolidate
-        let autoConsolidated = false;
-        if (chunksProcessed > 1 && totalMemories > CONSOLIDATION_THRESHOLD) {
-            const postMergeBlocks = parseMemories(await readMemories());
-            const currentChatBlocks = postMergeBlocks.filter(b => b.chat === effectiveChatId);
-            const otherBlocks = postMergeBlocks.filter(b => b.chat !== effectiveChatId);
-            const currentBulletCount = countMemories(currentChatBlocks);
-
-            if (currentBulletCount > CONSOLIDATION_THRESHOLD) {
-                logActivity(`Auto-consolidation triggered: ${currentBulletCount} bullets from current chat exceed threshold of ${CONSOLIDATION_THRESHOLD}`);
-                toastr.info(`Auto-consolidating ${currentBulletCount} bullets...`, 'CharMemory', { timeOut: 3000 });
-
-                const charName = getCharacterName() || '{{char}}';
-                const memoriesText = currentChatBlocks.map(b =>
-                    `${b.bullets.map(bullet => `- ${bullet}`).join('\n')}`,
-                ).join('\n');
-
-                let consolidatePrompt = autoConsolidationPrompt
-                    .replace(/\{\{charName\}\}/g, charName)
-                    .replace(/\{\{memories\}\}/g, memoriesText);
-                consolidatePrompt = substituteParamsExtended(consolidatePrompt);
-
-                const verbose = extension_settings[MODULE_NAME].verboseLogging;
-                if (verbose) {
-                    logActivity(`Auto-consolidation prompt (${consolidatePrompt.length} chars):\n${consolidatePrompt}`);
-                }
-
-                try {
-                    const consolidateResult = await callLLM(
-                        consolidatePrompt,
-                        extension_settings[MODULE_NAME].responseLength * 2,
-                        'You are a memory consolidation assistant.',
-                    );
-
-                    let cleanConsolidate = removeReasoningFromString(consolidateResult || '').trim();
-                    if (verbose && cleanConsolidate) {
-                        logActivity(`Auto-consolidation response:\n${cleanConsolidate}`);
-                    }
-
-                    if (cleanConsolidate) {
-                        const now = new Date();
-                        const timestamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-                        const memRegex = /<memory>([\s\S]*?)<\/memory>/gi;
-                        const memMatches = [...cleanConsolidate.matchAll(memRegex)];
-                        const rawEntries = memMatches.length > 0
-                            ? memMatches.map(m => m[1].trim()).filter(Boolean)
-                            : [cleanConsolidate.trim()].filter(Boolean);
-
-                        const consolidatedBlocks = rawEntries.map(entry => {
-                            const bullets = entry.split('\n')
-                                .map(l => l.trim())
-                                .filter(l => l.startsWith('- '))
-                                .map(l => l.slice(2).trim())
-                                .filter(Boolean);
-                            return { chat: effectiveChatId, date: timestamp, bullets: bullets.length > 0 ? bullets : [entry] };
-                        });
-
-                        const newBulletCount = countMemories(consolidatedBlocks);
-                        await writeMemories(serializeMemories([...otherBlocks, ...consolidatedBlocks]));
-                        totalMemories = newBulletCount;
-                        autoConsolidated = true;
-                        logActivity(`Auto-consolidation: ${currentBulletCount} bullets → ${newBulletCount}`, 'success');
-                    }
-                } catch (consolidateErr) {
-                    console.error(LOG_PREFIX, 'Auto-consolidation failed:', consolidateErr);
-                    logActivity(`Auto-consolidation failed: ${consolidateErr.message} — keeping original extraction`, 'warning');
-                }
-            }
-        }
-
         // Final status updates
         if (isActiveChat) {
             ensureMetadata();
@@ -1860,8 +1788,7 @@ async function extractMemories({
         updateAllIndicators();
 
         if (totalMemories > 0) {
-            const consolidatedNote = autoConsolidated ? ' (auto-consolidated)' : '';
-            toastr.success(`${totalMemories} memor${totalMemories === 1 ? 'y' : 'ies'} saved${consolidatedNote} from ${chunksProcessed} chunk(s).`, 'CharMemory');
+            toastr.success(`${totalMemories} memor${totalMemories === 1 ? 'y' : 'ies'} saved from ${chunksProcessed} chunk(s).`, 'CharMemory');
         } else if (chunksProcessed > 0) {
             toastr.info('No new memories found.', 'CharMemory');
         }
@@ -2463,22 +2390,6 @@ MEMORIES TO CONSOLIDATE:
 {{memories}}
 
 Output ONLY <memory> blocks. No headers, no commentary, no extra text.`;
-
-const autoConsolidationPrompt = `These memory notes were extracted from a recent conversation but are too granular. Consolidate them into no more than 8 concise bullet points.
-
-Character name: {{charName}}
-
-MEMORIES TO CONSOLIDATE:
-{{memories}}
-
-RULES:
-1. Keep only what {{char}} would bring up months later — cut play-by-play and trivial details.
-2. Merge related items into single bullets where possible.
-3. Preserve concrete details for significant events — do not sanitize or euphemize.
-4. Write in past tense, third person.
-5. Output a single <memory> block with no more than 8 bullet points.
-
-Output ONLY one <memory> block. No headers, no commentary, no extra text.`;
 
 async function consolidateMemories() {
     if (inApiCall) {

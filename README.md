@@ -497,7 +497,7 @@ The extension listens for `CHARACTER_MESSAGE_RENDERED` events and counts charact
 6. If it returns `NO_NEW_MEMORIES`, skips the update
 7. Advances the extraction pointer and repeats for the next chunk until all unprocessed messages are covered
 8. Merges memory blocks from the same chat into a single block
-9. If multi-chunk extraction produces >10 bullets, auto-consolidation runs
+9. Users can optionally consolidate memories manually using the Consolidate button (with preview and undo)
 
 ### Revectorization
 

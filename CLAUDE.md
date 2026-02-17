@@ -28,8 +28,7 @@ images/         — Screenshots for documentation
 4. Strips non-diegetic content (code blocks, tables, HTML tags) from messages
 5. Sends existing memories + recent messages + character card to the LLM with the extraction prompt
 6. Parses `<memory>` blocks from response, appends to Data Bank file
-7. If multi-chunk extraction produces >10 bullets, auto-consolidation runs
-8. Vector Storage handles vectorization and retrieval automatically
+7. Vector Storage handles vectorization and retrieval automatically
 
 ### Provider System (v1.2.0)
 

@@ -42,6 +42,15 @@ let lastExtractionTime = 0;
 const MAX_LOG_ENTRIES = 500;
 let activityLog = [];
 
+/**
+ * Get the databank source based on perChat setting.
+ * @returns {'character' | 'chat'}
+ */
+function getDatabankSource() {
+    return extension_settings[MODULE_NAME]?.perChat ? 'chat' : 'character';
+}
+// ==============================
+
 function logActivity(message, type = 'info') {
     const now = new Date();
     const timestamp = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
@@ -350,21 +359,29 @@ function generateMemoryFileName(charName) {
 }
 
 function findAllMemoryFiles() {
-    const attachments = getDataBankAttachmentsForSource('character');
+    // Use getDatabankSource() instead of hardcoded 'character'
+    const source = getDatabankSource();
+    const attachments = getDataBankAttachmentsForSource(source);
     const charName = getCharacterName();
     if (!charName) return [];
     const safeName = charName.replace(/[^a-zA-Z0-9_-]/g, '_');
     const prefix = `memory-${safeName}-`;
     return attachments.filter(a => a.name.startsWith(prefix) && a.name.endsWith('.md'));
 }
+// =================================
 
+// ===== REPLACE THIS FUNCTION =====
 async function writeMemoryFile(content, charName) {
     const fileName = generateMemoryFileName(charName);
     const fullContent = `<memory>\n${content.trim()}\n</memory>`;
     const file = new File([fullContent], fileName, { type: 'text/markdown' });
-    await uploadFileAttachmentToServer(file, 'character');
+
+    // Use getDatabankSource() instead of hardcoded 'character'
+    const source = getDatabankSource();
+    await uploadFileAttachmentToServer(file, source);
     return fileName;
 }
+// =================================
 
 async function readAllMemories() {
     const files = findAllMemoryFiles();
@@ -1501,7 +1518,8 @@ async function showMemoryManager() {
         if (!confirmed) return;
         const attachment = findAllMemoryFiles().find(f => f.name === fileName);
         if (attachment) {
-            await deleteAttachment(attachment, 'character', () => {}, false);
+            const source = getDatabankSource();
+await deleteAttachment(attachment, source, () => {}, false);
             $(this).closest('.charMemory_card').remove();
             toastr.success('Memory file deleted.', 'CharMemory');
             updateStatusDisplay();
@@ -1978,10 +1996,11 @@ function setupListeners() {
             }
             saveSettingsDebounced();
         }
-        const files = findAllMemoryFiles();
-        for (const file of files) {
-            await deleteAttachment(file, 'character', () => {}, false);
-        }
+        const source = getDatabankSource();
+    const files = findAllMemoryFiles();
+    for (const file of files) {
+        await deleteAttachment(file, source, () => {}, false);
+    }
         $('#charMemory_statCount').text('0 memories');
         $('#charMemory_statProgress').text(`0/${extension_settings[MODULE_NAME].interval} msgs`);
         updateStatusDisplay();
